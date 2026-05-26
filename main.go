@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
+	"os"
+	"os/signal"
 	"zaglyt-tg/configs"
+	"zaglyt-tg/handlers"
 	"zaglyt-tg/repository"
-	"zaglyt-tg/repository/channel"
+
+	"github.com/go-telegram/bot"
 )
 
 func main() {
@@ -21,26 +24,17 @@ func main() {
 	}
 	defer db.Close()
 
-	ctx := context.Background()
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
 
-	channel_repo := channel.NewChannelRepository(db)
+	opts := []bot.Option{
+		bot.WithDefaultHandler(handlers.EchoHandler),
+	}
 
-	err = channel_repo.Insert(ctx, 234, false, "default")
-	if err != nil {
+	b, err := bot.New(cfg.BotToken, opts...)
+	if nil != err {
 		panic(err)
 	}
 
-	channel, err := channel_repo.GetByChannelID(ctx, 234)
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println(channel)
-
-	updated_channel, err := channel_repo.Update(ctx, 234, true, "sigma")
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println(updated_channel)
+	b.Start(ctx)
 }

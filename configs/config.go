@@ -9,6 +9,8 @@ import (
 )
 
 type Config struct {
+	BotName  string
+	BotToken string
 	Driver   string
 	Host     string
 	Port     string
@@ -23,6 +25,8 @@ func LoadConfig() (*Config, error) {
 	}
 
 	cfg := &Config{
+		BotName:  os.Getenv("BOT_NAME"),
+		BotToken: os.Getenv("BOT_TOKEN"),
 		Driver:   os.Getenv("DB_DRIVER"),
 		Host:     os.Getenv("DB_HOST"),
 		Port:     os.Getenv("DB_PORT"),
