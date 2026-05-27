@@ -8,6 +8,7 @@ import (
 	"zaglyt-tg/app"
 	"zaglyt-tg/configs"
 	"zaglyt-tg/handlers"
+	"zaglyt-tg/middlewares"
 	"zaglyt-tg/repository"
 	"zaglyt-tg/repository/channel"
 
@@ -42,6 +43,7 @@ func main() {
 				handler.MessageHandler(ctx, b, update)
 			}
 		}),
+		bot.WithMiddlewares(middlewares.RecoveryMiddleware),
 	}
 
 	b, err := bot.New(cfg.BotToken, opts...)
@@ -66,7 +68,7 @@ func main() {
 	//admin commands
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/whoami", bot.MatchTypeExact, handler.WhoAmICommandHandler)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/stats", bot.MatchTypeExact, handler.GetBotStatsCommandHandler)
-	b.RegisterHandler(bot.HandlerTypeMessageText, "/broadcast", bot.MatchTypePrefix, h.BroadcastCommandHandler)
+	b.RegisterHandler(bot.HandlerTypeMessageText, "/broadcast", bot.MatchTypePrefix, handler.BroadcastCommandHandler)
 
 	// callbacks
 	b.RegisterHandler(
