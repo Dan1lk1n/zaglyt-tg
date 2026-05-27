@@ -68,3 +68,12 @@ func Clear(channelID string) error {
 
 	return nil
 }
+
+func Open(channelID string) (*os.File, error) {
+	path := filePath(channelID)
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	return file, nil
+}

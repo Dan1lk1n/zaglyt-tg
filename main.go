@@ -60,6 +60,7 @@ func main() {
 	//commands
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/switcher", bot.MatchTypeExact, handler.SwitcherCommandHandler)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/clear", bot.MatchTypeExact, handler.ClearCommandHandler)
+	b.RegisterHandler(bot.HandlerTypeMessageText, "/download", bot.MatchTypeExact, handler.DownloadCommandHandler)
 
 	// callbacks
 	b.RegisterHandler(
