@@ -329,3 +329,11 @@ func GenerateBestResponse(queryStr string, db []string, cfg Config) (string, err
 
 	return generatedText, nil
 }
+
+func GenerateRandomMarkov(db []string, minWords, maxWords int) string {
+	if len(db) == 0 {
+		return ""
+	}
+	model := buildMarkovChain(db)
+	return generateMarkovText(model, minWords, maxWords)
+}

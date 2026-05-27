@@ -61,6 +61,7 @@ func main() {
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/switcher", bot.MatchTypeExact, handler.SwitcherCommandHandler)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/clear", bot.MatchTypeExact, handler.ClearCommandHandler)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/download", bot.MatchTypeExact, handler.DownloadCommandHandler)
+	b.RegisterHandler(bot.HandlerTypeMessageText, "/anecdote", bot.MatchTypeExact, handler.GenerateAnecdoteCommandHandler)
 
 	//admin commands
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/whoami", bot.MatchTypeExact, handler.WhoAmICommandHandler)
