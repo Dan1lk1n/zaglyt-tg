@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"log"
+	"math/rand"
 	"os"
 	"os/signal"
+	"time"
 	"zaglyt-tg/app"
 	"zaglyt-tg/configs"
 	"zaglyt-tg/handlers"
@@ -34,6 +36,8 @@ func main() {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
+
+	rand.Seed(time.Now().UnixNano())
 
 	opts := []bot.Option{
 		bot.WithDefaultHandler(handler.MessageHandler),
