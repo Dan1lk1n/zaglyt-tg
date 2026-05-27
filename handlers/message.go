@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"zaglyt-tg/modules/messages"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -17,10 +18,15 @@ func (h *Handler) MessageHandler(ctx context.Context, b *bot.Bot, update *models
 				return
 			}
 
-			b.SendMessage(ctx, &bot.SendMessageParams{
-				ChatID: update.Message.Chat.ID,
-				Text:   fmt.Sprintf("Chat id is %d", channel.ChannelID),
-			})
+			if channel.Enabled {
+				if update.Message.Text != "" {
+					err := messages.Append(channel.ChannelID, update.Message.Text)
+					if err != nil {
+						fmt.Println(err)
+						return
+					}
+				}
+			}
 		}
 	}
 }
