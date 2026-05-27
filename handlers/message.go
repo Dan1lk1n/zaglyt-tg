@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 	"zaglyt-tg/models"
 	"zaglyt-tg/modules/helpers"
 	"zaglyt-tg/modules/messages"
@@ -58,6 +59,29 @@ func (h *Handler) MessageHandler(ctx context.Context, b *bot.Bot, update *goTele
 				response, err := z3abp.GenerateBestResponse(update.Message.Text, strings.Split(db, "\n"), z3abp.DefaultConfig())
 				if err != nil {
 					fmt.Println(err)
+					return
+				}
+
+				typingDuration := time.Duration(len(response)) * 15 * time.Millisecond
+
+				if typingDuration > 5*time.Second {
+					typingDuration = 5 * time.Second
+				}
+				if typingDuration < 500*time.Millisecond {
+					typingDuration = 500 * time.Millisecond
+				}
+
+				_, err = b.SendChatAction(ctx, &bot.SendChatActionParams{
+					ChatID: update.Message.Chat.ID,
+					Action: goTelegramModels.ChatActionTyping,
+				})
+				if err != nil {
+					fmt.Println(err)
+				}
+
+				select {
+				case <-time.After(typingDuration):
+				case <-ctx.Done():
 					return
 				}
 
