@@ -2,8 +2,11 @@ package configs
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -11,6 +14,9 @@ import (
 type Config struct {
 	BotName  string
 	BotToken string
+
+	Developers []int64
+
 	Driver   string
 	Host     string
 	Port     string
@@ -24,15 +30,30 @@ func LoadConfig() (*Config, error) {
 		log.Println(".env is not found")
 	}
 
+	devsStr := os.Getenv("DEVELOPERS")
+	var developers []int64
+
+	if devsStr != "" {
+		fields := strings.Fields(devsStr)
+		for _, field := range fields {
+			id, err := strconv.ParseInt(field, 10, 64)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse developer ID %q: %w", field, err)
+			}
+			developers = append(developers, id)
+		}
+	}
+
 	cfg := &Config{
-		BotName:  os.Getenv("BOT_NAME"),
-		BotToken: os.Getenv("BOT_TOKEN"),
-		Driver:   os.Getenv("DB_DRIVER"),
-		Host:     os.Getenv("DB_HOST"),
-		Port:     os.Getenv("DB_PORT"),
-		User:     os.Getenv("DB_USER"),
-		Password: os.Getenv("DB_PASSWORD"),
-		DBName:   os.Getenv("DB_NAME"),
+		BotName:    os.Getenv("BOT_NAME"),
+		BotToken:   os.Getenv("BOT_TOKEN"),
+		Developers: developers,
+		Driver:     os.Getenv("DB_DRIVER"),
+		Host:       os.Getenv("DB_HOST"),
+		Port:       os.Getenv("DB_PORT"),
+		User:       os.Getenv("DB_USER"),
+		Password:   os.Getenv("DB_PASSWORD"),
+		DBName:     os.Getenv("DB_NAME"),
 	}
 
 	if cfg.Host == "" || cfg.Port == "" || cfg.User == "" || cfg.DBName == "" {

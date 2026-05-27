@@ -62,6 +62,10 @@ func main() {
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/clear", bot.MatchTypeExact, handler.ClearCommandHandler)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/download", bot.MatchTypeExact, handler.DownloadCommandHandler)
 
+	//admin commands
+	b.RegisterHandler(bot.HandlerTypeMessageText, "/whoami", bot.MatchTypeExact, handler.WhoAmICommandHandler)
+	b.RegisterHandler(bot.HandlerTypeMessageText, "/stats", bot.MatchTypeExact, handler.GetBotStatsCommandHandler)
+
 	// callbacks
 	b.RegisterHandler(
 		bot.HandlerTypeCallbackQueryData,
