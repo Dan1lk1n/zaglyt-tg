@@ -1,15 +1,15 @@
 package handlers
 
 import (
-	"zaglyt-tg/repository/channel"
+	"zaglyt-tg/app"
 )
 
 type Handler struct {
-	channels channel.ChannelRepository
+	app app.App
 }
 
-func NewHandler(channels channel.ChannelRepository) Handler {
+func NewHandler(app app.App) Handler {
 	return Handler{
-		channels: channels,
+		app: app,
 	}
 }

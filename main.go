@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"zaglyt-tg/app"
 	"zaglyt-tg/configs"
 	"zaglyt-tg/handlers"
 	"zaglyt-tg/repository"
@@ -27,7 +28,9 @@ func main() {
 
 	channel_repo := channel.NewChannelRepository(db)
 
-	handler := handlers.NewHandler(channel_repo)
+	app := app.NewApp(channel_repo)
+
+	handler := handlers.NewHandler(app)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
