@@ -16,10 +16,12 @@ func (a *App) GetChatByID(ctx context.Context, channelID int64) (*models.Channel
 			return nil, err
 		}
 
+		defaultMode := "default"
+
 		channel = &models.Channel{
 			ChannelID: channelID,
 			Enabled:   true,
-			Mode:      "default",
+			Mode:      &defaultMode,
 		}
 	}
 

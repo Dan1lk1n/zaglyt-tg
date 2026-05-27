@@ -8,7 +8,7 @@ import (
 	"zaglyt-tg/models"
 )
 
-func (r *ChannelRepository) Update(ctx context.Context, channelID int64, enabled bool, mode string) (*models.Channel, error) {
+func (r *ChannelRepository) Update(ctx context.Context, channelID int64, enabled bool, mode *string) (*models.Channel, error) {
 	query := `
 		UPDATE channels 
 		SET enabled = $2, mode = $3 
