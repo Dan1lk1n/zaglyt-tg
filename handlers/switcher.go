@@ -19,6 +19,9 @@ func (h *Handler) SwitcherCommandHandler(ctx context.Context, b *bot.Bot, update
 			_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID: update.Message.Chat.ID,
 				Text:   `Команда только для чатов.`,
+				ReplyParameters: &models.ReplyParameters{
+					MessageID: update.Message.ID,
+				},
 			})
 
 			return
@@ -34,6 +37,9 @@ func (h *Handler) SwitcherCommandHandler(ctx context.Context, b *bot.Bot, update
 			_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID: update.Message.Chat.ID,
 				Text:   `❌ Команда доступна только для администраторов`,
+				ReplyParameters: &models.ReplyParameters{
+					MessageID: update.Message.ID,
+				},
 			})
 
 			return
@@ -54,6 +60,9 @@ func (h *Handler) SwitcherCommandHandler(ctx context.Context, b *bot.Bot, update
 Если вы его выключите, то он перестанет писать в чат.
 Если включите, то он будет писать в чат.`,
 			ReplyMarkup: keyboard,
+			ReplyParameters: &models.ReplyParameters{
+				MessageID: update.Message.ID,
+			},
 		})
 	}
 }
