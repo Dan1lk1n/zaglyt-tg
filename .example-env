@@ -1,0 +1,11 @@
+BOT_TOKEN=""
+BOT_NAME=""
+
+DEVELOPERS="developer_id_1 developer_id_2 developer_id_3"
+
+DB_DRIVER=""
+DB_HOST=""
+DB_PORT=""
+DB_USER=""
+DB_PASSWORD="!"
+DB_NAME=""
