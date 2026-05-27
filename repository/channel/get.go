@@ -22,3 +22,15 @@ func (r *ChannelRepository) GetByChannelID(ctx context.Context, channelID int64)
 
 	return &channel, nil
 }
+
+func (r *ChannelRepository) GetActiveChannelIDs(ctx context.Context) ([]int64, error) {
+	query := `SELECT channel_id FROM channels WHERE enabled = true`
+
+	var ids []int64
+	err := r.db.SelectContext(ctx, &ids, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active channel IDs: %w", err)
+	}
+
+	return ids, nil
+}

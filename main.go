@@ -65,6 +65,7 @@ func main() {
 	//admin commands
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/whoami", bot.MatchTypeExact, handler.WhoAmICommandHandler)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/stats", bot.MatchTypeExact, handler.GetBotStatsCommandHandler)
+	b.RegisterHandler(bot.HandlerTypeMessageText, "/broadcast", bot.MatchTypePrefix, h.BroadcastCommandHandler)
 
 	// callbacks
 	b.RegisterHandler(
