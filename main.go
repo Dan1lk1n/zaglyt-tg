@@ -34,12 +34,12 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	var messageHandler *handlers.Handler
+	var handler *handlers.Handler
 
 	opts := []bot.Option{
 		bot.WithDefaultHandler(func(ctx context.Context, b *bot.Bot, update *models.Update) {
-			if messageHandler != nil {
-				messageHandler.MessageHandler(ctx, b, update)
+			if handler != nil {
+				handler.MessageHandler(ctx, b, update)
 			}
 		}),
 	}
@@ -55,7 +55,18 @@ func main() {
 	}
 
 	h := handlers.NewHandler(app, bot_info)
-	messageHandler = &h
+	handler = &h
+
+	//commands
+	b.RegisterHandler(bot.HandlerTypeMessageText, "/switcher", bot.MatchTypeExact, handler.SwitcherCommandHandler)
+
+	// callbacks
+	b.RegisterHandler(
+		bot.HandlerTypeCallbackQueryData,
+		"bot_",
+		bot.MatchTypePrefix,
+		handler.CallbackBotSwitcher,
+	)
 
 	b.Start(ctx)
 }
