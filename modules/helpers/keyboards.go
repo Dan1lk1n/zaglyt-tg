@@ -28,3 +28,16 @@ func GetSwitcherKeyboard(enabled bool) *models.InlineKeyboardMarkup {
 		},
 	}
 }
+
+func GetClearKeyboard() *models.InlineKeyboardMarkup {
+	return &models.InlineKeyboardMarkup{
+		InlineKeyboard: [][]models.InlineKeyboardButton{
+			{
+				{
+					Text:         "Я уверен.",
+					CallbackData: "bot_clear",
+				},
+			},
+		},
+	}
+}

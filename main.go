@@ -64,6 +64,12 @@ func main() {
 	// callbacks
 	b.RegisterHandler(
 		bot.HandlerTypeCallbackQueryData,
+		"bot_clear",
+		bot.MatchTypePrefix,
+		handler.CallbackClear,
+	)
+	b.RegisterHandler(
+		bot.HandlerTypeCallbackQueryData,
 		"bot_",
 		bot.MatchTypePrefix,
 		handler.CallbackBotSwitcher,
