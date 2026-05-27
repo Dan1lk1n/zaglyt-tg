@@ -7,7 +7,7 @@ import (
 	"github.com/go-telegram/bot/models"
 )
 
-func EchoHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+func (h *Handler) EchoHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	if update.Message != nil {
 		b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: update.Message.Chat.ID,

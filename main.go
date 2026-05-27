@@ -8,6 +8,7 @@ import (
 	"zaglyt-tg/configs"
 	"zaglyt-tg/handlers"
 	"zaglyt-tg/repository"
+	"zaglyt-tg/repository/channel"
 
 	"github.com/go-telegram/bot"
 )
@@ -24,11 +25,15 @@ func main() {
 	}
 	defer db.Close()
 
+	channel_repo := channel.NewChannelRepository(db)
+
+	handler := handlers.NewHandler(channel_repo)
+
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
 	opts := []bot.Option{
-		bot.WithDefaultHandler(handlers.EchoHandler),
+		bot.WithDefaultHandler(handler.EchoHandler),
 	}
 
 	b, err := bot.New(cfg.BotToken, opts...)
