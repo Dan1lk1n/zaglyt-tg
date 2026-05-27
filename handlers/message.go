@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"zaglyt-tg/modules/helpers"
 	"zaglyt-tg/modules/messages"
 	"zaglyt-tg/modules/z3abp"
 
@@ -25,6 +26,10 @@ func (h *Handler) MessageHandler(ctx context.Context, b *bot.Bot, update *models
 					err := messages.Append(channel.ChannelID, update.Message.Text)
 					if err != nil {
 						fmt.Println(err)
+						return
+					}
+
+					if !helpers.ShouldRespond(ctx, b, update, h.bot.Username) {
 						return
 					}
 

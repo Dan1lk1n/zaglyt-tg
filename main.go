@@ -3,10 +3,8 @@ package main
 import (
 	"context"
 	"log"
-	"math/rand"
 	"os"
 	"os/signal"
-	"time"
 	"zaglyt-tg/app"
 	"zaglyt-tg/configs"
 	"zaglyt-tg/handlers"
@@ -14,6 +12,7 @@ import (
 	"zaglyt-tg/repository/channel"
 
 	"github.com/go-telegram/bot"
+	"github.com/go-telegram/bot/models"
 )
 
 func main() {
@@ -28,25 +27,35 @@ func main() {
 	}
 	defer db.Close()
 
-	channel_repo := channel.NewChannelRepository(db)
+	channelRepo := channel.NewChannelRepository(db)
 
-	app := app.NewApp(channel_repo)
-
-	handler := handlers.NewHandler(app)
+	app := app.NewApp(channelRepo)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	rand.Seed(time.Now().UnixNano())
+	var messageHandler *handlers.Handler
 
 	opts := []bot.Option{
-		bot.WithDefaultHandler(handler.MessageHandler),
+		bot.WithDefaultHandler(func(ctx context.Context, b *bot.Bot, update *models.Update) {
+			if messageHandler != nil {
+				messageHandler.MessageHandler(ctx, b, update)
+			}
+		}),
 	}
 
 	b, err := bot.New(cfg.BotToken, opts...)
-	if nil != err {
+	if err != nil {
 		panic(err)
 	}
+
+	bot_info, err := b.GetMe(ctx)
+	if err != nil {
+		log.Fatalf("failed to get bot info: %v", err)
+	}
+
+	h := handlers.NewHandler(app, bot_info)
+	messageHandler = &h
 
 	b.Start(ctx)
 }
