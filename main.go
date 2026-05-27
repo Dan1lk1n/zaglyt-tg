@@ -33,7 +33,7 @@ func main() {
 	defer cancel()
 
 	opts := []bot.Option{
-		bot.WithDefaultHandler(handler.EchoHandler),
+		bot.WithDefaultHandler(handler.MessageHandler),
 	}
 
 	b, err := bot.New(cfg.BotToken, opts...)
