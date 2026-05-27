@@ -15,6 +15,10 @@ func ShouldRespond(ctx context.Context, b *bot.Bot, update *models.Update, botUs
 		return false
 	}
 
+	if update.Message.Chat.Type == "private" {
+		return true
+	}
+
 	config, err := configs.LoadConfig()
 	if err != nil {
 		return false

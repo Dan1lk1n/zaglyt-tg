@@ -8,11 +8,11 @@ import (
 
 const basePath = "database/messages"
 
-func filePath(channelID int64) string {
-	return filepath.Join(basePath, fmt.Sprintf("%d.txt", channelID))
+func filePath(channelID string) string {
+	return filepath.Join(basePath, fmt.Sprintf("%s.txt", channelID))
 }
 
-func Append(channelID int64, message string) error {
+func Append(channelID string, message string) error {
 	path := filePath(channelID)
 
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
@@ -36,7 +36,7 @@ func Append(channelID int64, message string) error {
 	return nil
 }
 
-func Read(channelID int64) (string, error) {
+func Read(channelID string) (string, error) {
 	data, err := os.ReadFile(filePath(channelID))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -49,7 +49,7 @@ func Read(channelID int64) (string, error) {
 	return string(data), nil
 }
 
-func Clear(channelID int64) error {
+func Clear(channelID string) error {
 	path := filePath(channelID)
 
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
