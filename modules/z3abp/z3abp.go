@@ -1,10 +1,17 @@
 package z3abp
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"math/rand"
+	"os"
+	"os/exec"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -13,8 +20,84 @@ import (
 	"github.com/kljensen/snowball"
 )
 
+type MyStemWrapper struct {
+	cmd *exec.Cmd
+	in  io.WriteCloser
+	out *bufio.Scanner
+	mu  sync.Mutex
+}
+
+type MystemItem struct {
+	Analysis []struct {
+		Lex string `json:"lex"`
+		Gr  string `json:"gr"`
+	} `json:"analysis"`
+	Text string `json:"text"`
+}
+
+var Mystem *MyStemWrapper
+
+func StartMyStem() (*MyStemWrapper, error) {
+	binPath := "mystem"
+	if _, err := os.Stat("./mystem"); err == nil {
+		binPath = "./mystem"
+	}
+
+	cmd := exec.Command(binPath, "-icd", "--format", "json")
+
+	in, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
+
+	outPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+
+	return &MyStemWrapper{
+		cmd: cmd,
+		in:  in,
+		out: bufio.NewScanner(outPipe),
+	}, nil
+}
+
+func (m *MyStemWrapper) Analyze(text string) ([]MystemItem, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	text = strings.ReplaceAll(text, "\n", " ")
+	text = strings.ReplaceAll(text, "\r", "")
+
+	_, err := m.in.Write([]byte(text + "\n"))
+	if err != nil {
+		return nil, err
+	}
+
+	if m.out.Scan() {
+		line := m.out.Bytes()
+		var res []MystemItem
+		if err := json.Unmarshal(line, &res); err != nil {
+			return nil, err
+		}
+		return res, nil
+	}
+
+	return nil, m.out.Err()
+}
+
 func init() {
 	rand.Seed(time.Now().UnixNano())
+
+	var err error
+	Mystem, err = StartMyStem()
+	if err != nil {
+		log.Fatalf("failed to start mystem: %v", err)
+	}
 }
 
 type Config struct {
@@ -122,120 +205,153 @@ func RankDocuments(docs []string, query []string, k1, b float64) ([]DocScore, er
 	return rankedResults, nil
 }
 
-type MarkovModel struct {
-	Starts2      [][2]string
-	Starts1      []string
-	Transitions2 map[[2]string][]string
-	Transitions1 map[string][]string
+type MorphKey struct {
+	Lemma   string
+	Grammar string
 }
 
-func normWord(w string) string {
-	return strings.ToLower(strings.Trim(w, ".,!?:;\"'()[]{}«»\t\n\r "))
+type MorphToken struct {
+	Original string
+	Key      MorphKey
 }
 
-func buildMarkovChain(docs []string) MarkovModel {
-	model := MarkovModel{
-		Transitions2: make(map[[2]string][]string),
-		Transitions1: make(map[string][]string),
+type MorphMarkovModel struct {
+	Starts2      [][2]MorphToken
+	Starts1      []MorphToken
+	Transitions2 map[[2]MorphKey][]MorphToken
+	Transitions1 map[MorphKey][]MorphToken
+}
+
+func AnalyzeText(text string) []MorphToken {
+	resp, err := Mystem.Analyze(text)
+	if err != nil || len(resp) == 0 {
+		return nil
+	}
+
+	var tokens []MorphToken
+	for _, item := range resp {
+		if len(item.Analysis) > 0 {
+			analysis := item.Analysis[0]
+			tokens = append(tokens, MorphToken{
+				Original: item.Text,
+				Key: MorphKey{
+					Lemma:   analysis.Lex,
+					Grammar: analysis.Gr,
+				},
+			})
+		} else {
+			punc := strings.TrimSpace(item.Text)
+			if punc != "" && len(tokens) > 0 {
+				tokens[len(tokens)-1].Original += punc
+			}
+		}
+	}
+	return tokens
+}
+
+func buildMorphMarkovChain(docs []string) MorphMarkovModel {
+	model := MorphMarkovModel{
+		Transitions2: make(map[[2]MorphKey][]MorphToken),
+		Transitions1: make(map[MorphKey][]MorphToken),
 	}
 
 	for _, doc := range docs {
-		words := strings.Fields(doc)
-		if len(words) == 0 {
+		tokens := AnalyzeText(doc)
+		if len(tokens) == 0 {
 			continue
 		}
 
-		if len(words) == 1 {
-			model.Starts1 = append(model.Starts1, words[0])
-			model.Transitions1[normWord(words[0])] = append(model.Transitions1[normWord(words[0])], "")
+		if len(tokens) == 1 {
+			model.Starts1 = append(model.Starts1, tokens[0])
+			model.Transitions1[tokens[0].Key] = append(model.Transitions1[tokens[0].Key], MorphToken{})
 			continue
 		}
 
-		model.Starts2 = append(model.Starts2, [2]string{words[0], words[1]})
-		model.Starts1 = append(model.Starts1, words[0])
+		model.Starts2 = append(model.Starts2, [2]MorphToken{tokens[0], tokens[1]})
+		model.Starts1 = append(model.Starts1, tokens[0])
 
-		model.Transitions1[normWord(words[0])] = append(model.Transitions1[normWord(words[0])], words[1])
+		model.Transitions1[tokens[0].Key] = append(model.Transitions1[tokens[0].Key], tokens[1])
 
-		for i := 0; i < len(words)-2; i++ {
-			w1, w2, w3 := words[i], words[i+1], words[i+2]
+		for i := 0; i < len(tokens)-2; i++ {
+			t1, t2, t3 := tokens[i], tokens[i+1], tokens[i+2]
 
-			norm2 := [2]string{normWord(w1), normWord(w2)}
-			norm1 := normWord(w2)
+			key2 := [2]MorphKey{t1.Key, t2.Key}
+			key1 := t2.Key
 
-			model.Transitions2[norm2] = append(model.Transitions2[norm2], w3)
-			model.Transitions1[norm1] = append(model.Transitions1[norm1], w3)
+			model.Transitions2[key2] = append(model.Transitions2[key2], t3)
+			model.Transitions1[key1] = append(model.Transitions1[key1], t3)
 		}
 
-		lastWord := words[len(words)-1]
-		prevWord := words[len(words)-2]
+		lastToken := tokens[len(tokens)-1]
+		prevToken := tokens[len(tokens)-2]
 
-		normLast2 := [2]string{normWord(prevWord), normWord(lastWord)}
-		normLast1 := normWord(lastWord)
+		keyLast2 := [2]MorphKey{prevToken.Key, lastToken.Key}
+		keyLast1 := lastToken.Key
 
-		model.Transitions2[normLast2] = append(model.Transitions2[normLast2], "")
-		model.Transitions1[normLast1] = append(model.Transitions1[normLast1], "")
+		model.Transitions2[keyLast2] = append(model.Transitions2[keyLast2], MorphToken{})
+		model.Transitions1[keyLast1] = append(model.Transitions1[keyLast1], MorphToken{})
 	}
 
 	return model
 }
 
-func generateMarkovText(model MarkovModel, minWords, maxWords int) string {
+func generateMorphMarkovText(model MorphMarkovModel, minWords, maxWords int) string {
 	if len(model.Starts1) == 0 && len(model.Starts2) == 0 {
 		return ""
 	}
 
 	for attempt := 0; attempt < 50; attempt++ {
 		var result []string
-		var currNorm1 string
-		var currNorm2 [2]string
+		var currKey1 MorphKey
+		var currKey2 [2]MorphKey
 		useOrder2 := false
 
 		if len(model.Starts2) > 0 && rand.Float32() < 0.8 {
 			start := model.Starts2[rand.Intn(len(model.Starts2))]
-			result = append(result, start[0], start[1])
-			currNorm2 = [2]string{normWord(start[0]), normWord(start[1])}
-			currNorm1 = normWord(start[1])
+			result = append(result, start[0].Original, start[1].Original)
+			currKey2 = [2]MorphKey{start[0].Key, start[1].Key}
+			currKey1 = start[1].Key
 			useOrder2 = true
 		} else if len(model.Starts1) > 0 {
 			start := model.Starts1[rand.Intn(len(model.Starts1))]
-			result = append(result, start)
-			currNorm1 = normWord(start)
+			result = append(result, start.Original)
+			currKey1 = start.Key
 		} else {
 			continue
 		}
 
 		for len(result) < maxWords {
-			var nextWords []string
+			var nextTokens []MorphToken
 			var exists bool
 
 			if useOrder2 {
-				nextWords, exists = model.Transitions2[currNorm2]
+				nextTokens, exists = model.Transitions2[currKey2]
 			}
 
-			if !exists || len(nextWords) == 0 || rand.Float32() < 0.15 {
-				altWords, altExists := model.Transitions1[currNorm1]
-				if altExists && len(altWords) > 0 {
-					nextWords = altWords
+			if !exists || len(nextTokens) == 0 || rand.Float32() < 0.15 {
+				altTokens, altExists := model.Transitions1[currKey1]
+				if altExists && len(altTokens) > 0 {
+					nextTokens = altTokens
 					exists = true
 				}
 			}
 
-			if !exists || len(nextWords) == 0 {
+			if !exists || len(nextTokens) == 0 {
 				break
 			}
 
-			nextWord := nextWords[rand.Intn(len(nextWords))]
-			if nextWord == "" {
+			nextToken := nextTokens[rand.Intn(len(nextTokens))]
+			if nextToken.Original == "" {
 				break
 			}
 
-			result = append(result, nextWord)
+			result = append(result, nextToken.Original)
 
 			if len(result) >= 2 {
-				currNorm2 = [2]string{normWord(result[len(result)-2]), normWord(nextWord)}
+				currKey2 = [2]MorphKey{currKey1, nextToken.Key}
 				useOrder2 = true
 			}
-			currNorm1 = normWord(nextWord)
+			currKey1 = nextToken.Key
 		}
 
 		if len(result) >= minWords && len(result) <= maxWords {
@@ -310,9 +426,9 @@ func GenerateBestResponse(queryStr string, db []string, cfg Config) (string, err
 		topDocs = append(topDocs, doc.Document)
 	}
 
-	model := buildMarkovChain(topDocs)
+	model := buildMorphMarkovChain(topDocs)
 
-	generatedText := generateMarkovText(model, cfg.MinGenWords, cfg.MaxGenWords)
+	generatedText := generateMorphMarkovText(model, cfg.MinGenWords, cfg.MaxGenWords)
 
 	if generatedText == "" {
 		bestDoc := rankedDb[0].Document
@@ -334,6 +450,6 @@ func GenerateRandomMarkov(db []string, minWords, maxWords int) string {
 	if len(db) == 0 {
 		return ""
 	}
-	model := buildMarkovChain(db)
-	return generateMarkovText(model, minWords, maxWords)
+	model := buildMorphMarkovChain(db)
+	return generateMorphMarkovText(model, minWords, maxWords)
 }
