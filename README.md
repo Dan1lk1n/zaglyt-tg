@@ -113,7 +113,7 @@
 | `BOT_NAME` | Имя бота (для срабатывания по обращению) | — |
 | `DEVELOPERS` | ID разработчиков через пробел | пусто |
 | `BOT_MODE` | Режим обновлений: `polling` или `webhook` | `polling` |
-| `WEBHOOK_URL` | Публичный HTTPS-URL, куда Telegram шлёт апдейты | обяз. для webhook |
+| `WEBHOOK_URL` | Базовый HTTPS-URL (схема + хост); путь добавляется из `WEBHOOK_PATH` | обяз. для webhook |
 | `WEBHOOK_SECRET` | Секрет, проверяемый в заголовке каждого запроса | обяз. для webhook |
 | `WEBHOOK_LISTEN_ADDR` | Локальный адрес HTTP-сервера | `:8080` |
 | `WEBHOOK_PATH` | Путь, на котором обслуживается вебхук | `/webhook` |

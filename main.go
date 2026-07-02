@@ -123,7 +123,7 @@ func main() {
 	switch cfg.Mode {
 	case configs.ModeWebhook:
 		ok, err := b.SetWebhook(ctx, &bot.SetWebhookParams{
-			URL:         cfg.WebhookURL,
+			URL:         cfg.WebhookFullURL(),
 			SecretToken: cfg.WebhookSecret,
 		})
 		if err != nil || !ok {

@@ -30,6 +30,8 @@ type Config struct {
 	Mode string
 
 	// Webhook settings are only used (and validated) when Mode == "webhook".
+	// WebhookURL is the base public URL (scheme + host, e.g. https://example.com);
+	// WebhookPath is appended to it automatically — see WebhookFullURL.
 	WebhookURL                string
 	WebhookSecret             string
 	WebhookListenAddr         string
@@ -131,6 +133,15 @@ func LoadConfig() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// WebhookFullURL assembles the public webhook URL that Telegram posts to, from
+// the base WebhookURL and WebhookPath. This keeps the path defined in one place
+// (WEBHOOK_PATH) instead of having to repeat it inside WEBHOOK_URL. A trailing
+// slash on the base is trimmed; WebhookPath is already normalized to start with "/".
+func (c *Config) WebhookFullURL() string {
+	base := strings.TrimRight(strings.TrimSpace(c.WebhookURL), "/")
+	return base + c.WebhookPath
 }
 
 // normalizeMode lowercases and trims BOT_MODE, defaulting to polling when empty.

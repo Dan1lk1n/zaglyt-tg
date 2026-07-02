@@ -8,15 +8,16 @@ DEVELOPERS="developer_id_1 developer_id_2 developer_id_3"
 BOT_MODE="polling"
 
 # Required when BOT_MODE=webhook.
-# Public HTTPS URL Telegram will POST updates to (must match WEBHOOK_PATH).
+# Public HTTPS BASE URL (scheme + host only, no path), e.g. https://example.com
+# The full webhook URL is assembled automatically as WEBHOOK_URL + WEBHOOK_PATH.
 WEBHOOK_URL=""
 # Secret sent by Telegram in the X-Telegram-Bot-Api-Secret-Token header and
 # verified on every request. Use a long random string. Required for webhook.
-WEBHOOK_SECRET=""
+WEBHOOK_SECRET="openssl rand -hex 32"
 # Local address the HTTP server listens on (inside the container).
 WEBHOOK_LISTEN_ADDR=":8080"
-# Path the webhook is served on. Use a hard-to-guess segment for extra cover,
-# e.g. /webhook/<random>. Must match the path portion of WEBHOOK_URL.
+# Path the webhook is served on, appended to WEBHOOK_URL to form the full URL.
+# Use a hard-to-guess segment for extra cover, e.g. /webhook/<random>.
 WEBHOOK_PATH="/webhook"
 # Restrict incoming requests to Telegram's published IP ranges. Disable this if
 # you sit behind a reverse proxy/CDN (RemoteAddr would be the proxy, not Telegram).
