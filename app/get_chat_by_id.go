@@ -5,25 +5,9 @@ import (
 	"zaglyt-tg/models"
 )
 
+// GetChatByID returns the channel for chatID, creating it with default values
+// on first sight. Creation is a single race-safe upsert, so concurrent updates
+// from the same new chat can no longer collide.
 func (a *App) GetChatByID(ctx context.Context, channelID int64) (*models.Channel, error) {
-	channel, err := a.channels.GetByChannelID(ctx, channelID)
-	if err != nil {
-		return nil, err
-	}
-	if channel == nil {
-		err := a.channels.Insert(ctx, channelID, true, "default")
-		if err != nil {
-			return nil, err
-		}
-
-		defaultMode := "default"
-
-		channel = &models.Channel{
-			ChannelID: channelID,
-			Enabled:   true,
-			Mode:      &defaultMode,
-		}
-	}
-
-	return channel, nil
+	return a.channels.GetOrCreate(ctx, channelID)
 }

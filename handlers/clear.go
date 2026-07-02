@@ -2,10 +2,8 @@ package handlers
 
 import (
 	"context"
-	"fmt"
-	"strconv"
+	"log/slog"
 	"zaglyt-tg/modules/helpers"
-	"zaglyt-tg/modules/messages"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -31,7 +29,7 @@ func (h *Handler) ClearCommandHandler(ctx context.Context, b *bot.Bot, update *m
 
 		isAdmin, err := helpers.IsUserAdmin(ctx, b, update.Message.Chat.ID, update.Message.From.ID, string(update.Message.Chat.Type))
 		if err != nil {
-			fmt.Println(err)
+			slog.Error("check admin", "chat_id", update.Message.Chat.ID, "user_id", update.Message.From.ID, "err", err)
 			return
 		}
 
@@ -72,7 +70,7 @@ func (h *Handler) CallbackClear(ctx context.Context, b *bot.Bot, update *models.
 
 	isAdmin, err := helpers.IsUserAdmin(ctx, b, chatID, userID, chatType)
 	if err != nil {
-		fmt.Println(err)
+		slog.Error("check admin", "chat_id", chatID, "user_id", userID, "err", err)
 		return
 	}
 
@@ -87,13 +85,13 @@ func (h *Handler) CallbackClear(ctx context.Context, b *bot.Bot, update *models.
 
 	channel, err := h.app.GetChatByID(ctx, chatID)
 	if err != nil {
-		fmt.Println(err)
+		slog.Error("get chat for clear", "chat_id", chatID, "err", err)
 		return
 	}
 
-	err = messages.Clear(strconv.FormatInt(channel.ChannelID, 10))
+	err = h.app.ClearMessages(ctx, channel.ChannelID)
 	if err != nil {
-		fmt.Println(err)
+		slog.Error("clear messages", "channel_id", channel.ChannelID, "err", err)
 		return
 	}
 

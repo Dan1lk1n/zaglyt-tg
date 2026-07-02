@@ -2,13 +2,9 @@ package handlers
 
 import (
 	"context"
-	"fmt"
-	"strconv"
-	"strings"
+	"log/slog"
 	"time"
-	"zaglyt-tg/models"
 	"zaglyt-tg/modules/helpers"
-	"zaglyt-tg/modules/messages"
 	"zaglyt-tg/modules/z3abp"
 
 	"github.com/go-telegram/bot"
@@ -16,87 +12,87 @@ import (
 )
 
 func (h *Handler) MessageHandler(ctx context.Context, b *bot.Bot, update *goTelegramModels.Update) {
-	if update.Message != nil {
-		if update.Message.Chat.Type == "channel" {
-			return
-		}
+	if update.Message == nil {
+		return
+	}
 
-		var channel *models.Channel
-		if update.Message.Chat.Type != "private" {
-			var err error
-			channel, err = h.app.GetChatByID(ctx, update.Message.Chat.ID)
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-		}
+	// The bot only operates in group chats: channels and private messages are
+	// ignored entirely (no storing, no responding).
+	if update.Message.Chat.Type == "channel" || update.Message.Chat.Type == "private" {
+		return
+	}
 
-		if update.Message.Chat.Type == "private" || channel.Enabled {
-			if update.Message.Text != "" {
-				var fileName string
-				if update.Message.Chat.Type == "private" {
-					fileName = "dm"
-				} else {
-					fileName = strconv.FormatInt(channel.ChannelID, 10)
-				}
+	if update.Message.Text == "" {
+		return
+	}
 
-				err := messages.Append(fileName, update.Message.Text)
-				if err != nil {
-					fmt.Println(err)
-					return
-				}
+	channel, err := h.app.GetChatByID(ctx, update.Message.Chat.ID)
+	if err != nil {
+		slog.Error("get chat for message", "chat_id", update.Message.Chat.ID, "err", err)
+		return
+	}
 
-				if !helpers.ShouldRespond(ctx, b, update, h.bot.Username) {
-					return
-				}
+	if !channel.Enabled {
+		return
+	}
 
-				db, err := messages.Read(fileName)
-				if err != nil {
-					fmt.Println(err)
-					return
-				}
+	if err := h.app.AppendMessage(ctx, channel.ChannelID, update.Message.Text); err != nil {
+		slog.Error("append message", "channel_id", channel.ChannelID, "err", err)
+		return
+	}
 
-				response, err := z3abp.GenerateBestResponse(update.Message.Text, strings.Split(db, "\n"), z3abp.DefaultConfig())
-				if err != nil {
-					fmt.Println(err)
-					return
-				}
+	if !helpers.ShouldRespond(ctx, b, update, h.bot.Username, h.cfg.BotName, channel.ReplyProbability) {
+		return
+	}
 
-				typingDuration := time.Duration(len(response)) * 15 * time.Millisecond
+	history, err := h.app.GetMessages(ctx, channel.ChannelID)
+	if err != nil {
+		slog.Error("read messages", "channel_id", channel.ChannelID, "err", err)
+		return
+	}
 
-				if typingDuration > 5*time.Second {
-					typingDuration = 5 * time.Second
-				}
-				if typingDuration < 500*time.Millisecond {
-					typingDuration = 500 * time.Millisecond
-				}
+	genCfg := z3abp.DefaultConfig()
+	genCfg.MinGenWords = channel.MinGenWords
+	genCfg.MaxGenWords = channel.MaxGenWords
 
-				_, err = b.SendChatAction(ctx, &bot.SendChatActionParams{
-					ChatID: update.Message.Chat.ID,
-					Action: goTelegramModels.ChatActionTyping,
-				})
-				if err != nil {
-					fmt.Println(err)
-				}
+	response, err := z3abp.GenerateBestResponse(update.Message.Text, history, genCfg)
+	if err != nil {
+		slog.Debug("no response generated", "chat_id", update.Message.Chat.ID, "err", err)
+		return
+	}
 
-				select {
-				case <-time.After(typingDuration):
-				case <-ctx.Done():
-					return
-				}
+	typingDuration := time.Duration(len(response)) * 15 * time.Millisecond
 
-				_, err = b.SendMessage(ctx, &bot.SendMessageParams{
-					ChatID: update.Message.Chat.ID,
-					Text:   response,
-					ReplyParameters: &goTelegramModels.ReplyParameters{
-						MessageID: update.Message.ID,
-					},
-				})
-				if err != nil {
-					fmt.Println(err)
-					return
-				}
-			}
-		}
+	if typingDuration > 5*time.Second {
+		typingDuration = 5 * time.Second
+	}
+	if typingDuration < 500*time.Millisecond {
+		typingDuration = 500 * time.Millisecond
+	}
+
+	_, err = b.SendChatAction(ctx, &bot.SendChatActionParams{
+		ChatID: update.Message.Chat.ID,
+		Action: goTelegramModels.ChatActionTyping,
+	})
+	if err != nil {
+		slog.Error("send chat action", "chat_id", update.Message.Chat.ID, "err", err)
+	}
+
+	select {
+	case <-time.After(typingDuration):
+	case <-ctx.Done():
+		return
+	}
+
+	_, err = b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID: update.Message.Chat.ID,
+		Text:   response,
+		ReplyParameters: &goTelegramModels.ReplyParameters{
+			MessageID: update.Message.ID,
+		},
+	})
+	if err != nil {
+		slog.Error("send message", "chat_id", update.Message.Chat.ID, "err", err)
+		return
 	}
 }

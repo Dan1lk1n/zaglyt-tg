@@ -3,6 +3,39 @@ BOT_NAME=""
 
 DEVELOPERS="developer_id_1 developer_id_2 developer_id_3"
 
+# ---- Update mode ----
+# polling (default) | webhook
+BOT_MODE="polling"
+
+# Required when BOT_MODE=webhook.
+# Public HTTPS URL Telegram will POST updates to (must match WEBHOOK_PATH).
+WEBHOOK_URL=""
+# Secret sent by Telegram in the X-Telegram-Bot-Api-Secret-Token header and
+# verified on every request. Use a long random string. Required for webhook.
+WEBHOOK_SECRET=""
+# Local address the HTTP server listens on (inside the container).
+WEBHOOK_LISTEN_ADDR=":8080"
+# Path the webhook is served on. Use a hard-to-guess segment for extra cover,
+# e.g. /webhook/<random>. Must match the path portion of WEBHOOK_URL.
+WEBHOOK_PATH="/webhook"
+# Restrict incoming requests to Telegram's published IP ranges. Disable this if
+# you sit behind a reverse proxy/CDN (RemoteAddr would be the proxy, not Telegram).
+WEBHOOK_IP_ALLOWLIST_ENABLED="true"
+
+# ---- Logging ----
+LOG_LEVEL="info"
+LOG_FORMAT="text"
+
+# ---- Morphology (mystem) ----
+# Max number of cached morphological-analysis results (bounds RAM by entry
+# count). 0 disables the cache. Default: 20000.
+MYSTEM_CACHE_SIZE="20000"
+
+# Option 1 (recommended): a single connection string.
+# When DATABASE_URL is set, the DB_* variables below are ignored.
+DATABASE_URL="postgres://user:password@host:5432/dbname?sslmode=disable"
+
+# Option 2: individual parts (used only when DATABASE_URL is empty).
 DB_DRIVER=""
 DB_HOST=""
 DB_PORT=""

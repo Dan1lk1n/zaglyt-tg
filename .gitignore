@@ -1,2 +1,16 @@
+# secrets & local data
 .env
 database
+
+# mystem is fetched at build time, never committed (see Dockerfile)
+mystem
+mystem-*.tar.gz
+
+# build output
+/zaglyt-tg
+*.out
+
+# editor / OS
+.DS_Store
+.idea/
+.vscode/

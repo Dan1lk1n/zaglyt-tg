@@ -8,9 +8,9 @@ import (
 
 func (r *ChannelRepository) GetBotStats(ctx context.Context) (*models.BotStats, error) {
 	query := `
-		SELECT 
-			COUNT(*) as total_chats,
-			COALESCE(SUM(CASE WHEN enabled = true THEN 1 ELSE 0 END), 0) as enabled_chats
+		SELECT
+			COUNT(*)                         AS total_chats,
+			COUNT(*) FILTER (WHERE enabled)  AS enabled_chats
 		FROM channels
 	`
 

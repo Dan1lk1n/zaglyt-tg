@@ -1,21 +1,9 @@
 package helpers
 
-import (
-	"fmt"
-	"slices"
-	"zaglyt-tg/configs"
-)
+import "slices"
 
-func IsUserDeveloper(userID int64) bool {
-	config, err := configs.LoadConfig()
-	if err != nil {
-		fmt.Println(err)
-		return false
-	}
-
-	if slices.Contains(config.Developers, userID) {
-		return true
-	}
-
-	return false
+// IsUserDeveloper reports whether userID is in the injected developers list.
+// The list is loaded once from config and passed in — no per-call disk I/O.
+func IsUserDeveloper(userID int64, developers []int64) bool {
+	return slices.Contains(developers, userID)
 }

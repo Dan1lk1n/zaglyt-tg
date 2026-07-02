@@ -2,22 +2,29 @@ package channel
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"zaglyt-tg/models"
 )
 
-func (r *ChannelRepository) GetByChannelID(ctx context.Context, channelID int64) (*models.Channel, error) {
-	query := `SELECT id, channel_id, enabled, mode FROM channels WHERE channel_id = $1`
+// channelColumns is the full column list for the channels table. It is shared by
+// every query that returns a *models.Channel so that adding a column only
+// requires touching this one place.
+const channelColumns = "id, channel_id, enabled, mode, min_gen_words, max_gen_words, reply_probability"
+
+// GetOrCreate returns the channel row for channelID, creating it with default
+// values if it does not exist yet. It is a single, race-safe round-trip: the
+// ON CONFLICT clause makes concurrent first-time inserts idempotent, and the
+// no-op UPDATE lets RETURNING yield the existing row as well as a freshly
+// inserted one.
+func (r *ChannelRepository) GetOrCreate(ctx context.Context, channelID int64) (*models.Channel, error) {
+	query := fmt.Sprintf(`
+		INSERT INTO channels (channel_id) VALUES ($1)
+		ON CONFLICT (channel_id) DO UPDATE SET channel_id = EXCLUDED.channel_id
+		RETURNING %s`, channelColumns)
 
 	var channel models.Channel
-	err := r.db.GetContext(ctx, &channel, query, channelID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("an error occurred while getting the channel %d: %w", channelID, err)
+	if err := r.db.GetContext(ctx, &channel, query, channelID); err != nil {
+		return nil, fmt.Errorf("get or create channel %d: %w", channelID, err)
 	}
 
 	return &channel, nil

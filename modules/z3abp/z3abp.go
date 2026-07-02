@@ -3,16 +3,16 @@ package z3abp
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"math/rand"
 	"os"
 	"os/exec"
 	"sort"
 	"strings"
 	"sync"
-	"time"
 	"unicode"
 
 	"github.com/bbalet/stopwords"
@@ -36,6 +36,13 @@ type MystemItem struct {
 }
 
 var Mystem *MyStemWrapper
+
+// analyzeCache memoizes morphological analysis per text line. It is nil when
+// caching is disabled (cache size <= 0).
+var analyzeCache *lruCache
+
+// DefaultMystemCacheSize is used when no explicit size is configured.
+const DefaultMystemCacheSize = 20000
 
 func StartMyStem() (*MyStemWrapper, error) {
 	binPath := "mystem"
@@ -66,38 +73,95 @@ func StartMyStem() (*MyStemWrapper, error) {
 	}, nil
 }
 
+// Close terminates the underlying mystem subprocess. Safe to call on nil.
+func (m *MyStemWrapper) Close() error {
+	if m == nil || m.cmd == nil || m.cmd.Process == nil {
+		return nil
+	}
+	_ = m.in.Close()
+	return m.cmd.Process.Kill()
+}
+
 func (m *MyStemWrapper) Analyze(text string) ([]MystemItem, error) {
+	if m == nil {
+		return nil, errors.New("mystem is not initialized")
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	text = strings.ReplaceAll(text, "\n", " ")
 	text = strings.ReplaceAll(text, "\r", "")
 
-	_, err := m.in.Write([]byte(text + "\n"))
-	if err != nil {
-		return nil, err
-	}
-
-	if m.out.Scan() {
-		line := m.out.Bytes()
-		var res []MystemItem
-		if err := json.Unmarshal(line, &res); err != nil {
-			return nil, err
-		}
+	res, err := m.exchange(text)
+	if err == nil {
 		return res, nil
 	}
 
-	return nil, m.out.Err()
+	// A write error or EOF on read means the subprocess died (or the protocol
+	// desynced). Restart it once and retry so a crashed mystem self-heals
+	// instead of silently returning empty results forever.
+	if rerr := m.restart(); rerr != nil {
+		return nil, fmt.Errorf("mystem exchange failed (%v); restart failed: %w", err, rerr)
+	}
+	return m.exchange(text)
 }
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-
-	var err error
-	Mystem, err = StartMyStem()
-	if err != nil {
-		log.Fatalf("failed to start mystem: %v", err)
+// exchange writes one line to mystem and reads exactly one JSON response line.
+// The caller must hold m.mu. A false Scan with a nil scanner error means the
+// process closed its output (died); that is reported as io.ErrUnexpectedEOF
+// rather than a silent nil,nil.
+func (m *MyStemWrapper) exchange(text string) ([]MystemItem, error) {
+	if _, err := m.in.Write([]byte(text + "\n")); err != nil {
+		return nil, err
 	}
+
+	if !m.out.Scan() {
+		if err := m.out.Err(); err != nil {
+			return nil, err
+		}
+		return nil, io.ErrUnexpectedEOF
+	}
+
+	var res []MystemItem
+	if err := json.Unmarshal(m.out.Bytes(), &res); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+// restart replaces the dead subprocess with a fresh one. The caller must hold m.mu.
+func (m *MyStemWrapper) restart() error {
+	if m.cmd != nil && m.cmd.Process != nil {
+		_ = m.in.Close()
+		_ = m.cmd.Process.Kill()
+		_ = m.cmd.Wait()
+	}
+
+	fresh, err := StartMyStem()
+	if err != nil {
+		return err
+	}
+	m.cmd, m.in, m.out = fresh.cmd, fresh.in, fresh.out
+	return nil
+}
+
+// Init starts the mystem subprocess and stores it in the package-level Mystem.
+// It must be called once at startup; the returned error is handled by the
+// caller (main) instead of aborting the process from an init() hook.
+//
+// cacheSize bounds the in-memory morphological-analysis cache by number of
+// entries; pass <= 0 to disable caching entirely.
+func Init(cacheSize int) error {
+	m, err := StartMyStem()
+	if err != nil {
+		return fmt.Errorf("failed to start mystem: %w", err)
+	}
+	Mystem = m
+	if cacheSize > 0 {
+		analyzeCache = newLRU(cacheSize)
+	}
+	return nil
 }
 
 type Config struct {
@@ -139,7 +203,9 @@ func StemWords(words []string) []string {
 	return stemmed
 }
 
-func ContainsQuery(line, query string) bool {
+// isQueryLine reports whether a stored line is (case-insensitively) identical to
+// the query, so FilterLines can skip it and avoid the bot echoing the input.
+func isQueryLine(line, query string) bool {
 	line = strings.ToLower(strings.TrimSpace(line))
 	query = strings.ToLower(strings.TrimSpace(query))
 	return line == query
@@ -148,7 +214,7 @@ func ContainsQuery(line, query string) bool {
 func FilterLines(db []string, stems []string, query string) []string {
 	var foundLines []string
 	for _, line := range db {
-		if ContainsQuery(line, query) {
+		if isQueryLine(line, query) {
 			continue
 		}
 
@@ -223,8 +289,30 @@ type MorphMarkovModel struct {
 }
 
 func AnalyzeText(text string) []MorphToken {
+	if analyzeCache != nil {
+		if cached, ok := analyzeCache.Get(text); ok {
+			return cached
+		}
+	}
+
+	tokens := analyzeTextUncached(text)
+
+	// Only cache productive results; a transient mystem error yields nil and
+	// should not be memoized as the permanent answer for this line.
+	if analyzeCache != nil && len(tokens) > 0 {
+		analyzeCache.Add(text, tokens)
+	}
+
+	return tokens
+}
+
+func analyzeTextUncached(text string) []MorphToken {
 	resp, err := Mystem.Analyze(text)
-	if err != nil || len(resp) == 0 {
+	if err != nil {
+		slog.Warn("mystem analyze failed", "err", err)
+		return nil
+	}
+	if len(resp) == 0 {
 		return nil
 	}
 

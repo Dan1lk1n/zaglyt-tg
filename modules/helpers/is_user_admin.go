@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/go-telegram/bot"
+	"github.com/go-telegram/bot/models"
 )
 
 func IsUserAdmin(ctx context.Context, b *bot.Bot, chatID int64, userID int64, chatType string) (bool, error) {
@@ -19,10 +20,17 @@ func IsUserAdmin(ctx context.Context, b *bot.Bot, chatID int64, userID int64, ch
 		return false, err
 	}
 
-	status := member.Owner.Status
-	if status == "administrator" || status == "creator" {
-		return true, nil
-	}
+	return isAdminMember(member.Type), nil
+}
 
-	return false, nil
+// isAdminMember reports whether a chat-member type grants admin rights.
+// ChatMember is a discriminated union — only the pointer matching member.Type
+// is non-nil — so the decision must be made from Type, not by reading a variant.
+func isAdminMember(t models.ChatMemberType) bool {
+	switch t {
+	case models.ChatMemberTypeOwner, models.ChatMemberTypeAdministrator:
+		return true
+	default:
+		return false
+	}
 }

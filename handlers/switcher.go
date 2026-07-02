@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"context"
-	"fmt"
+	"log/slog"
 	"zaglyt-tg/modules/helpers"
 
 	"github.com/go-telegram/bot"
@@ -29,7 +29,7 @@ func (h *Handler) SwitcherCommandHandler(ctx context.Context, b *bot.Bot, update
 
 		isAdmin, err := helpers.IsUserAdmin(ctx, b, update.Message.Chat.ID, update.Message.From.ID, string(update.Message.Chat.Type))
 		if err != nil {
-			fmt.Println(err)
+			slog.Error("check admin", "chat_id", update.Message.Chat.ID, "user_id", update.Message.From.ID, "err", err)
 			return
 		}
 
@@ -47,7 +47,7 @@ func (h *Handler) SwitcherCommandHandler(ctx context.Context, b *bot.Bot, update
 
 		channel, err := h.app.GetChatByID(ctx, update.Message.Chat.ID)
 		if err != nil {
-			fmt.Println(err)
+			slog.Error("get chat for switcher", "chat_id", update.Message.Chat.ID, "err", err)
 			return
 		}
 
@@ -79,7 +79,7 @@ func (h *Handler) CallbackBotSwitcher(ctx context.Context, b *bot.Bot, update *m
 
 	isAdmin, err := helpers.IsUserAdmin(ctx, b, chatID, userID, chatType)
 	if err != nil {
-		fmt.Println(err)
+		slog.Error("check admin", "chat_id", chatID, "user_id", userID, "err", err)
 		return
 	}
 
@@ -95,15 +95,12 @@ func (h *Handler) CallbackBotSwitcher(ctx context.Context, b *bot.Bot, update *m
 	data := update.CallbackQuery.Data
 	enable := (data == "bot_enable")
 
-	channel, err := h.app.GetChatByID(ctx, chatID)
+	// A toggle only changes the enabled flag, so a single UPDATE suffices — no
+	// preliminary read of the channel is needed. The row already exists because
+	// the switcher keyboard is only produced after GetChatByID created it.
+	channel, err := h.app.SetChatEnabled(ctx, chatID, enable)
 	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	channel, err = h.app.UpdateChat(ctx, channel.ChannelID, enable, channel.Mode)
-	if err != nil {
-		fmt.Println(err)
+		slog.Error("update chat enabled state", "chat_id", chatID, "err", err)
 		return
 	}
 

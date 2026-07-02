@@ -5,16 +5,18 @@ import (
 	"zaglyt-tg/models"
 )
 
-func (a *App) UpdateChat(ctx context.Context, channelID int64, enabled bool, mode *string) (*models.Channel, error) {
-	channel, err := a.channels.GetByChannelID(ctx, channelID)
-	if err != nil {
-		return nil, err
-	}
+// SetChatEnabled flips the bot on/off for a chat in a single UPDATE, without
+// the redundant read the previous implementation performed.
+func (a *App) SetChatEnabled(ctx context.Context, channelID int64, enabled bool) (*models.Channel, error) {
+	return a.channels.SetEnabled(ctx, channelID, enabled)
+}
 
-	channel, err = a.channels.Update(ctx, channelID, enabled, mode)
-	if err != nil {
-		return nil, err
-	}
+// SetChatWords updates the per-chat generated-response word range.
+func (a *App) SetChatWords(ctx context.Context, channelID int64, minWords, maxWords int) (*models.Channel, error) {
+	return a.channels.SetWords(ctx, channelID, minWords, maxWords)
+}
 
-	return channel, nil
+// SetChatReplyProbability updates the per-chat random-reply chance (percent, 0..100).
+func (a *App) SetChatReplyProbability(ctx context.Context, channelID int64, pct int) (*models.Channel, error) {
+	return a.channels.SetReplyProbability(ctx, channelID, pct)
 }

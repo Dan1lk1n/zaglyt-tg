@@ -10,8 +10,11 @@ import (
 )
 
 func InitDB(cfg *configs.Config) (*sqlx.DB, error) {
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DBName)
+	dsn := cfg.DatabaseURL
+	if dsn == "" {
+		dsn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+			cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DBName)
+	}
 
 	db, err := sqlx.Connect(cfg.Driver, dsn)
 	if err != nil {

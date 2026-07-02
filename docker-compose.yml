@@ -1,0 +1,54 @@
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN}
+      BOT_NAME: ${BOT_NAME}
+      DEVELOPERS: ${DEVELOPERS}
+      # Single connection string. Overrides the individual DB_* variables.
+      DATABASE_URL: ${DATABASE_URL:-postgres://${DB_USER:-zaglyt}:${DB_PASSWORD:-zaglyt}@db:5432/${DB_NAME:-zaglyt}?sslmode=disable}
+      # Update mode: polling (default) or webhook. See .example-env for details.
+      BOT_MODE: ${BOT_MODE:-polling}
+      WEBHOOK_URL: ${WEBHOOK_URL:-}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
+      WEBHOOK_LISTEN_ADDR: ${WEBHOOK_LISTEN_ADDR:-:8080}
+      WEBHOOK_PATH: ${WEBHOOK_PATH:-/webhook}
+      WEBHOOK_IP_ALLOWLIST_ENABLED: ${WEBHOOK_IP_ALLOWLIST_ENABLED:-true}
+    # Published for webhook mode (harmless in polling mode). The container
+    # listens on 8080 by default; keep WEBHOOK_LISTEN_ADDR=":8080" to match.
+    ports:
+      - "8080:8080"
+    volumes:
+      # Persist per-channel message files across restarts
+      - messages:/app/database/messages
+    healthcheck:
+      # Only meaningful in webhook mode; passes trivially otherwise.
+      test: ["CMD-SHELL", "[ \"$$BOT_MODE\" != webhook ] || wget -qO- http://localhost:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-zaglyt}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-zaglyt}
+      POSTGRES_DB: ${DB_NAME:-zaglyt}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-zaglyt} -d ${DB_NAME:-zaglyt}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  messages:
+  pgdata:

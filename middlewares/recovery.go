@@ -2,7 +2,7 @@ package middlewares
 
 import (
 	"context"
-	"fmt"
+	"log/slog"
 	"runtime/debug"
 
 	"github.com/go-telegram/bot"
@@ -13,7 +13,10 @@ func RecoveryMiddleware(next bot.HandlerFunc) bot.HandlerFunc {
 	return func(ctx context.Context, b *bot.Bot, update *models.Update) {
 		defer func() {
 			if r := recover(); r != nil {
-				fmt.Printf("Panic: %v\nStack:\n%s", r, debug.Stack())
+				slog.Error("recovered from panic in handler",
+					"panic", r,
+					"stack", string(debug.Stack()),
+				)
 			}
 		}()
 

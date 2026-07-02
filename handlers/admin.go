@@ -4,6 +4,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 	"zaglyt-tg/modules/helpers"
@@ -14,7 +15,7 @@ import (
 
 func (h *Handler) WhoAmICommandHandler(ctx context.Context, b *bot.Bot, update *goTelegramModels.Update) {
 	if update.Message != nil {
-		if helpers.IsUserDeveloper(update.Message.From.ID) {
+		if helpers.IsUserDeveloper(update.Message.From.ID, h.cfg.Developers) {
 			_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID: update.Message.Chat.ID,
 				Text:   "Разработчик.",
@@ -28,10 +29,10 @@ func (h *Handler) WhoAmICommandHandler(ctx context.Context, b *bot.Bot, update *
 
 func (h *Handler) GetBotStatsCommandHandler(ctx context.Context, b *bot.Bot, update *goTelegramModels.Update) {
 	if update.Message != nil {
-		if helpers.IsUserDeveloper(update.Message.From.ID) {
+		if helpers.IsUserDeveloper(update.Message.From.ID, h.cfg.Developers) {
 			stats, err := h.app.GetBotStats(ctx)
 			if err != nil {
-				fmt.Println(err)
+				slog.Error("get bot stats", "err", err)
 				return
 			}
 
@@ -51,7 +52,7 @@ func (h *Handler) BroadcastCommandHandler(ctx context.Context, b *bot.Bot, updat
 		return
 	}
 
-	if !helpers.IsUserDeveloper(update.Message.From.ID) {
+	if !helpers.IsUserDeveloper(update.Message.From.ID, h.cfg.Developers) {
 		return
 	}
 
@@ -71,7 +72,7 @@ func (h *Handler) BroadcastCommandHandler(ctx context.Context, b *bot.Bot, updat
 
 	chatIDs, err := h.app.GetActiveChats(ctx)
 	if err != nil {
-		fmt.Println(err)
+		slog.Error("get active chats for broadcast", "err", err)
 		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: update.Message.Chat.ID,
 			Text:   "Не удалось получить список чатов для рассылки.",
@@ -88,19 +89,26 @@ func (h *Handler) BroadcastCommandHandler(ctx context.Context, b *bot.Bot, updat
 		return
 	}
 
-	statusMessage, _ := b.SendMessage(ctx, &bot.SendMessageParams{
+	statusMessage, err := b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
 		Text:   fmt.Sprintf("Рассылка запущена фоном для %d чатов.", totalChats),
 	})
+	if err != nil || statusMessage == nil {
+		slog.Error("broadcast: failed to send status message", "err", err)
+		return
+	}
 
-	go h.runBackgroundBroadcast(context.Background(), b, update.Message.Chat.ID, statusMessage.ID, chatIDs, broadcastText)
+	// Pass the handler ctx (the app-root context): it lives for the whole
+	// process and cancels on shutdown, so the broadcast can be interrupted.
+	go h.runBackgroundBroadcast(ctx, b, update.Message.Chat.ID, statusMessage.ID, chatIDs, broadcastText)
 }
 
 func (h *Handler) runBackgroundBroadcast(ctx context.Context, b *bot.Bot, adminChatID int64, statusMsgID int, chatIDs []int64, text string) {
 	successCount := 0
 	failCount := 0
 
-	ticker := time.NewTicker(35 * time.Millisecond)
+	// ~20 msg/s, kept under Telegram's ~30/s global limit for headroom.
+	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
 
 	for _, chatID := range chatIDs {
