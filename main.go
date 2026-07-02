@@ -56,13 +56,24 @@ func main() {
 
 	var handler *handlers.Handler
 
+	// Update types the bot needs. my_chat_member is NOT in Telegram's default
+	// set, so it must be requested explicitly (for both polling and webhook) to
+	// enforce who may add the bot to chats.
+	allowedUpdates := []string{"message", "callback_query", "my_chat_member"}
+
 	opts := []bot.Option{
 		bot.WithDefaultHandler(func(ctx context.Context, b *bot.Bot, update *models.Update) {
-			if handler != nil {
-				handler.MessageHandler(ctx, b, update)
+			if handler == nil {
+				return
 			}
+			if update.MyChatMember != nil {
+				handler.MyChatMemberHandler(ctx, b, update)
+				return
+			}
+			handler.MessageHandler(ctx, b, update)
 		}),
 		bot.WithMiddlewares(middlewares.RecoveryMiddleware),
+		bot.WithAllowedUpdates(bot.AllowedUpdates(allowedUpdates)),
 	}
 
 	// In webhook mode the library validates the secret token sent by Telegram
@@ -123,8 +134,9 @@ func main() {
 	switch cfg.Mode {
 	case configs.ModeWebhook:
 		ok, err := b.SetWebhook(ctx, &bot.SetWebhookParams{
-			URL:         cfg.WebhookFullURL(),
-			SecretToken: cfg.WebhookSecret,
+			URL:            cfg.WebhookFullURL(),
+			SecretToken:    cfg.WebhookSecret,
+			AllowedUpdates: allowedUpdates,
 		})
 		if err != nil || !ok {
 			slog.Error("failed to set webhook", "err", err, "ok", ok)
