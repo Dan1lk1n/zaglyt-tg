@@ -43,3 +43,22 @@ DB_PORT=""
 DB_USER=""
 DB_PASSWORD="!"
 DB_NAME=""
+
+# ---- Local LLM (optional) ----
+# Enable the llm container (llama.cpp + Qwen2.5-0.5B-abliterated) in compose.
+# Remove this line (or `docker compose stop llm`) to free RAM: the bot then
+# answers with the plain Markov pipeline.
+COMPOSE_PROFILES="llm"
+# Server URL; set to "" to disable the LLM in the bot entirely.
+LLM_URL="http://llm:8080"
+# Persona override; empty uses the built-in rude chat persona.
+LLM_SYSTEM_PROMPT=""
+LLM_TIMEOUT_SECONDS="20"
+LLM_MAX_TOKENS="64"
+# Prompt budget: oldest chat messages are dropped to stay under it.
+LLM_MAX_PROMPT_CHARS="2500"
+LLM_CONTEXT_MESSAGES="15"
+# llm container limits.
+LLM_MEM_LIMIT="700m"
+LLM_CTX_SIZE="2048"
+LLM_THREADS="2"

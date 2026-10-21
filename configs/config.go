@@ -53,6 +53,16 @@ type Config struct {
 	// MystemCacheSize bounds the in-memory morphological-analysis cache by
 	// number of entries. <= 0 disables caching.
 	MystemCacheSize int
+
+	// LLM settings. An empty LLMURL disables the LLM and the bot replies with
+	// pure Markov output, as before.
+	LLMURL             string
+	LLMModel           string
+	LLMSystemPrompt    string
+	LLMTimeoutSeconds  int
+	LLMMaxTokens       int
+	LLMMaxPromptChars  int
+	LLMContextMessages int
 }
 
 func LoadConfig() (*Config, error) {
@@ -88,6 +98,14 @@ func LoadConfig() (*Config, error) {
 		LogFormat:   os.Getenv("LOG_FORMAT"),
 
 		MystemCacheSize: parseInt(os.Getenv("MYSTEM_CACHE_SIZE"), 20000),
+
+		LLMURL:             strings.TrimSpace(os.Getenv("LLM_URL")),
+		LLMModel:           os.Getenv("LLM_MODEL"),
+		LLMSystemPrompt:    os.Getenv("LLM_SYSTEM_PROMPT"),
+		LLMTimeoutSeconds:  parseInt(os.Getenv("LLM_TIMEOUT_SECONDS"), 20),
+		LLMMaxTokens:       parseInt(os.Getenv("LLM_MAX_TOKENS"), 64),
+		LLMMaxPromptChars:  parseInt(os.Getenv("LLM_MAX_PROMPT_CHARS"), 2500),
+		LLMContextMessages: parseInt(os.Getenv("LLM_CONTEXT_MESSAGES"), 15),
 	}
 
 	if strings.TrimSpace(cfg.BotToken) == "" {

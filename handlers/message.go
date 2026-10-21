@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 	"zaglyt-tg/modules/helpers"
+	"zaglyt-tg/modules/llm"
 	"zaglyt-tg/modules/z3abp"
 
 	"github.com/go-telegram/bot"
@@ -55,9 +57,19 @@ func (h *Handler) MessageHandler(ctx context.Context, b *bot.Bot, update *goTele
 	genCfg.MinGenWords = channel.MinGenWords
 	genCfg.MaxGenWords = channel.MaxGenWords
 
-	response, err := z3abp.GenerateBestResponse(update.Message.Text, history, genCfg)
+	// Show "typing…" up front: an LLM call can take a few seconds.
+	startedAt := time.Now()
+	_, err = b.SendChatAction(ctx, &bot.SendChatActionParams{
+		ChatID: update.Message.Chat.ID,
+		Action: goTelegramModels.ChatActionTyping,
+	})
 	if err != nil {
-		slog.Debug("no response generated", "chat_id", update.Message.Chat.ID, "err", err)
+		slog.Error("send chat action", "chat_id", update.Message.Chat.ID, "err", err)
+	}
+
+	response := h.composeResponse(ctx, update.Message.Text, history, genCfg)
+	if response == "" {
+		slog.Debug("no response generated", "chat_id", update.Message.Chat.ID)
 		return
 	}
 
@@ -70,16 +82,8 @@ func (h *Handler) MessageHandler(ctx context.Context, b *bot.Bot, update *goTele
 		typingDuration = 500 * time.Millisecond
 	}
 
-	_, err = b.SendChatAction(ctx, &bot.SendChatActionParams{
-		ChatID: update.Message.Chat.ID,
-		Action: goTelegramModels.ChatActionTyping,
-	})
-	if err != nil {
-		slog.Error("send chat action", "chat_id", update.Message.Chat.ID, "err", err)
-	}
-
 	select {
-	case <-time.After(typingDuration):
+	case <-time.After(typingDuration - time.Since(startedAt)):
 	case <-ctx.Done():
 		return
 	}
@@ -95,4 +99,52 @@ func (h *Handler) MessageHandler(ctx context.Context, b *bot.Bot, update *goTele
 		slog.Error("send message", "chat_id", update.Message.Chat.ID, "err", err)
 		return
 	}
+}
+
+// llmCandidates is how many Markov variants the LLM gets to choose from.
+const llmCandidates = 3
+
+// composeResponse builds a reply: Markov candidates first, then the LLM picks,
+// polishes or replaces them. Any LLM failure falls back to the Markov reply.
+func (h *Handler) composeResponse(ctx context.Context, query string, history []string, genCfg z3abp.Config) string {
+	attempts := 1
+	if h.llm != nil {
+		attempts = llmCandidates
+	}
+
+	var candidates []string
+	seen := make(map[string]bool)
+	for range attempts {
+		cand, err := z3abp.GenerateBestResponse(query, history, genCfg)
+		if err != nil || seen[cand] {
+			continue
+		}
+		seen[cand] = true
+		candidates = append(candidates, cand)
+	}
+
+	if h.llm == nil {
+		if len(candidates) == 0 {
+			return ""
+		}
+		return candidates[0]
+	}
+
+	// The triggering message was just appended; it's passed separately as query.
+	recent := history
+	if n := len(recent); n > 0 && recent[n-1] == query {
+		recent = recent[:n-1]
+	}
+
+	reply, err := h.llm.Compose(ctx, recent, query, candidates)
+	if err != nil {
+		if !errors.Is(err, llm.ErrUnavailable) {
+			slog.Warn("llm compose failed, using markov reply", "err", err)
+		}
+		if len(candidates) == 0 {
+			return ""
+		}
+		return candidates[0]
+	}
+	return reply
 }

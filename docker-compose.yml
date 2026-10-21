@@ -20,6 +20,14 @@ services:
       WEBHOOK_LISTEN_ADDR: ${WEBHOOK_LISTEN_ADDR:-:8080}
       WEBHOOK_PATH: ${WEBHOOK_PATH:-/webhook}
       WEBHOOK_IP_ALLOWLIST_ENABLED: ${WEBHOOK_IP_ALLOWLIST_ENABLED:-true}
+      # Local LLM that picks/rewrites Markov replies. Set LLM_URL="" to disable;
+      # the bot also falls back to Markov whenever the LLM is down or slow.
+      LLM_URL: ${LLM_URL-http://llm:8080}
+      LLM_SYSTEM_PROMPT: ${LLM_SYSTEM_PROMPT:-}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-20}
+      LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-64}
+      LLM_MAX_PROMPT_CHARS: ${LLM_MAX_PROMPT_CHARS:-2500}
+      LLM_CONTEXT_MESSAGES: ${LLM_CONTEXT_MESSAGES:-15}
     # Published for webhook mode (harmless in polling mode). The container
     # listens on 8080 by default; keep WEBHOOK_LISTEN_ADDR=":8080" to match.
     ports:
@@ -33,6 +41,53 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # Qwen2.5-0.5B-Instruct-abliterated (Q4_K_M, ~400 MB) served by llama.cpp.
+  # Memory is bounded on three levels:
+  #   - fixed context window (-c): the KV cache never grows past it; the bot
+  #     trims old chat messages so every prompt fits (LLM_MAX_PROMPT_CHARS);
+  #   - --cache-ram 0: no host-side prompt cache (llama.cpp default is 8 GB!);
+  #   - mem_limit: hard cgroup cap, the container is OOM-killed and restarted
+  #     rather than eating the host's RAM.
+  # Optional: started only with COMPOSE_PROFILES=llm. It can also be stopped
+  # any time (docker compose stop llm); the bot then replies with Markov only.
+  llm:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    profiles: ["llm"]
+    restart: unless-stopped
+    command:
+      - --hf-repo
+      - mradermacher/Qwen2.5-0.5B-Instruct-abliterated-GGUF
+      - --hf-file
+      - Qwen2.5-0.5B-Instruct-abliterated.Q4_K_M.gguf
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --ctx-size
+      - "${LLM_CTX_SIZE:-2048}"
+      - --parallel
+      - "1"
+      - --batch-size
+      - "256"
+      - --ubatch-size
+      - "256"
+      - --cache-ram
+      - "0"
+      - --threads
+      - "${LLM_THREADS:-2}"
+      - --no-webui
+    volumes:
+      # Downloaded model weights, so restarts don't re-download ~400 MB.
+      - llm-models:/root/.cache/llama.cpp
+    mem_limit: ${LLM_MEM_LIMIT:-700m}
+    memswap_limit: ${LLM_MEM_LIMIT:-700m}
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
 
   db:
     image: postgres:16-alpine
@@ -50,5 +105,6 @@ services:
       retries: 10
 
 volumes:
+  llm-models:
   messages:
   pgdata:
