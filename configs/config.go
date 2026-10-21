@@ -102,7 +102,7 @@ func LoadConfig() (*Config, error) {
 		LLMURL:             strings.TrimSpace(os.Getenv("LLM_URL")),
 		LLMModel:           os.Getenv("LLM_MODEL"),
 		LLMSystemPrompt:    os.Getenv("LLM_SYSTEM_PROMPT"),
-		LLMTimeoutSeconds:  parseInt(os.Getenv("LLM_TIMEOUT_SECONDS"), 20),
+		LLMTimeoutSeconds:  parseInt(os.Getenv("LLM_TIMEOUT_SECONDS"), 30),
 		LLMMaxTokens:       parseInt(os.Getenv("LLM_MAX_TOKENS"), 64),
 		LLMMaxPromptChars:  parseInt(os.Getenv("LLM_MAX_PROMPT_CHARS"), 2500),
 		LLMContextMessages: parseInt(os.Getenv("LLM_CONTEXT_MESSAGES"), 15),

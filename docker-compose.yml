@@ -24,7 +24,7 @@ services:
       # the bot also falls back to Markov whenever the LLM is down or slow.
       LLM_URL: ${LLM_URL-http://llm:8080}
       LLM_SYSTEM_PROMPT: ${LLM_SYSTEM_PROMPT:-}
-      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-20}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-30}
       LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-64}
       LLM_MAX_PROMPT_CHARS: ${LLM_MAX_PROMPT_CHARS:-2500}
       LLM_CONTEXT_MESSAGES: ${LLM_CONTEXT_MESSAGES:-15}
@@ -42,7 +42,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # Qwen2.5-0.5B-Instruct-abliterated (Q4_K_M, ~400 MB) served by llama.cpp.
+  # Qwen3-1.7B-abliterated (Q4_K_M, ~1.1 GB) served by llama.cpp.
   # Memory is bounded on three levels:
   #   - fixed context window (-c): the KV cache never grows past it; the bot
   #     trims old chat messages so every prompt fits (LLM_MAX_PROMPT_CHARS);
@@ -57,9 +57,9 @@ services:
     restart: unless-stopped
     command:
       - --hf-repo
-      - mradermacher/Qwen2.5-0.5B-Instruct-abliterated-GGUF
+      - mradermacher/Qwen3-1.7B-abliterated-GGUF
       - --hf-file
-      - Qwen2.5-0.5B-Instruct-abliterated.Q4_K_M.gguf
+      - Qwen3-1.7B-abliterated.Q4_K_M.gguf
       - --host
       - 0.0.0.0
       - --port
@@ -76,12 +76,15 @@ services:
       - "0"
       - --threads
       - "${LLM_THREADS:-2}"
+      # Qwen3 "thinking" would add seconds of hidden text before every reply.
+      - --reasoning
+      - "off"
       - --no-webui
     volumes:
-      # Downloaded model weights, so restarts don't re-download ~400 MB.
+      # Downloaded model weights, so restarts don't re-download ~1.1 GB.
       - llm-models:/root/.cache/llama.cpp
-    mem_limit: ${LLM_MEM_LIMIT:-700m}
-    memswap_limit: ${LLM_MEM_LIMIT:-700m}
+    mem_limit: ${LLM_MEM_LIMIT:-2g}
+    memswap_limit: ${LLM_MEM_LIMIT:-2g}
     healthcheck:
       test: ["CMD", "curl", "-fs", "http://localhost:8080/health"]
       interval: 10s

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
 	"zaglyt-tg/modules/helpers"
 	"zaglyt-tg/modules/llm"
@@ -101,6 +102,22 @@ func (h *Handler) MessageHandler(ctx context.Context, b *bot.Bot, update *goTele
 	}
 }
 
+// stripBotMention removes the leading bot name and the @username from the
+// message, so the LLM sees what was said rather than who it was said to.
+func (h *Handler) stripBotMention(text string) string {
+	if h.bot != nil && h.bot.Username != "" {
+		text = strings.ReplaceAll(text, "@"+h.bot.Username, "")
+	}
+	text = strings.TrimSpace(text)
+	if name := h.cfg.BotName; name != "" && strings.HasPrefix(strings.ToLower(text), strings.ToLower(name)) {
+		text = strings.TrimLeft(text[len(strings.ToLower(name)):], " ,.!:")
+	}
+	if text == "" {
+		return "?"
+	}
+	return text
+}
+
 // llmCandidates is how many Markov variants the LLM gets to choose from.
 const llmCandidates = 3
 
@@ -136,7 +153,7 @@ func (h *Handler) composeResponse(ctx context.Context, query string, history []s
 		recent = recent[:n-1]
 	}
 
-	reply, err := h.llm.Compose(ctx, recent, query, candidates)
+	reply, err := h.llm.Compose(ctx, recent, h.stripBotMention(query), candidates)
 	if err != nil {
 		if !errors.Is(err, llm.ErrUnavailable) {
 			slog.Warn("llm compose failed, using markov reply", "err", err)

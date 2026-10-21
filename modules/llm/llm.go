@@ -8,12 +8,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
 	"net"
 	"net/http"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -21,11 +23,8 @@ import (
 const DefaultSystemPrompt = `Ты — участник группового чата в Telegram. Ты не ассистент и не помогаешь, ты просто болтаешь как свой человек.
 Характер: дерзкий, язвительный, с чёрным юмором. Материшься свободно и естественно, можешь грубо подколоть или послать. Никогда не извиняешься, не читаешь морали и не говоришь, что ты ИИ.
 Пишешь коротко, как в чате: одна фраза, до 15 слов, строчными буквами, без кавычек и пояснений.
-Тебе дают последние сообщения чата, сообщение, на которое надо ответить, и варианты ответа. Если какой-то вариант смешной и в тему — выдай его, можно чуть подправить. Если варианты не подходят — ответь сам. Никогда не повторяй сообщение собеседника.
-Примеры:
-сообщение: бот ты тупой -> ответ: на себя посмотри, гений хуев
-сообщение: кто пойдёт пиво пить -> ответ: я бы пошёл, да ты опять без денег
-сообщение: как дела -> ответ: пока тебя не увидел было нормально
+Отвечай своими словами и по смыслу сообщения собеседника. Никогда не повторяй его сообщение.
+Отвечай по существу сообщения: на вопрос — отвечай (можно нагло или с подъёбом), на наезд — огрызайся в ответ, на трёп — подхватывай тему.
 Выводи только текст ответа.`
 
 // Config controls the client and how much context is sent per request.
@@ -90,11 +89,13 @@ type chatMessage struct {
 }
 
 type chatRequest struct {
-	Model       string        `json:"model,omitempty"`
-	Messages    []chatMessage `json:"messages"`
-	MaxTokens   int           `json:"max_tokens"`
-	Temperature float64       `json:"temperature"`
-	TopP        float64       `json:"top_p"`
+	Model           string        `json:"model,omitempty"`
+	Messages        []chatMessage `json:"messages"`
+	MaxTokens       int           `json:"max_tokens"`
+	Temperature     float64       `json:"temperature"`
+	TopP            float64       `json:"top_p"`
+	PresencePenalty float64       `json:"presence_penalty"`
+	Seed            int64         `json:"seed"`
 }
 
 type chatResponse struct {
@@ -110,17 +111,23 @@ func (c *Client) Compose(ctx context.Context, history []string, query string, ca
 		return "", ErrUnavailable
 	}
 
-	prompt := c.buildPrompt(history, query, candidates)
+	query = truncate(query, 500)
+	history = c.fitHistory(history, query, candidates)
 
+	// Chat context goes into the system message; the message to answer is the
+	// only user turn. Small models otherwise "continue the list" and copy lines.
 	body, err := json.Marshal(chatRequest{
 		Model: c.cfg.Model,
 		Messages: []chatMessage{
-			{Role: "system", Content: c.cfg.SystemPrompt},
-			{Role: "user", Content: prompt},
+			{Role: "system", Content: c.systemPrompt(history, candidates)},
+			{Role: "user", Content: query},
 		},
-		MaxTokens:   c.cfg.MaxTokens,
-		Temperature: 0.9,
-		TopP:        0.95,
+		MaxTokens:       c.cfg.MaxTokens,
+		Temperature:     1.0,
+		TopP:            0.95,
+		PresencePenalty: 0.5,
+		// Explicit per-request seed so identical prompts don't produce identical replies.
+		Seed: rand.Int63(),
 	})
 	if err != nil {
 		return "", err
@@ -162,54 +169,74 @@ func (c *Client) Compose(ctx context.Context, history []string, query string, ca
 		return "", errors.New("llm returned an empty reply")
 	}
 	// Tiny models sometimes just parrot the message back.
-	if strings.EqualFold(reply, strings.TrimSpace(query)) {
+	if q := normalize(query); q != "" && strings.Contains(q, normalize(reply)) {
 		return "", errors.New("llm echoed the query")
+	}
+	// ...or copy a line of the chat verbatim.
+	for _, line := range history {
+		if normalize(line) == normalize(reply) {
+			return "", errors.New("llm copied a chat line")
+		}
 	}
 	return reply, nil
 }
 
-// buildPrompt fits the request into MaxPromptChars: the query and candidates
-// always go in, then as many of the most recent history lines as still fit.
-func (c *Client) buildPrompt(history []string, query string, candidates []string) string {
-	var tail strings.Builder
-	tail.WriteString("\nОтветь на сообщение: ")
-	tail.WriteString(truncate(query, 500))
-	tail.WriteString("\n")
-	if len(candidates) > 0 {
-		tail.WriteString("Варианты:\n")
-		for i, cand := range candidates {
-			fmt.Fprintf(&tail, "%d. %s\n", i+1, truncate(cand, 200))
-		}
+// fitHistory keeps the most recent history lines (at most ContextMessages)
+// that still fit into MaxPromptChars next to the query and candidates.
+// Older lines are dropped first. Returns oldest first.
+func (c *Client) fitHistory(history []string, query string, candidates []string) []string {
+	budget := c.cfg.MaxPromptChars - utf8.RuneCountInString(query)
+	for _, cand := range candidates {
+		budget -= utf8.RuneCountInString(cand) + 4
 	}
-	tail.WriteString("Твой ответ:")
-
-	budget := c.cfg.MaxPromptChars - utf8.RuneCountInString(tail.String())
 
 	if len(history) > c.cfg.ContextMessages {
 		history = history[len(history)-c.cfg.ContextMessages:]
 	}
-	// Walk from newest to oldest and stop once the budget is spent.
-	var lines []string
-	for i := len(history) - 1; i >= 0; i-- {
-		line := "- " + truncate(history[i], 300)
-		n := utf8.RuneCountInString(line) + 1
+	start := len(history)
+	for start > 0 {
+		n := utf8.RuneCountInString(truncate(history[start-1], 300)) + 3
 		if n > budget {
 			break
 		}
 		budget -= n
-		lines = append(lines, line)
+		start--
 	}
 
+	fitted := make([]string, 0, len(history)-start)
+	for _, line := range history[start:] {
+		fitted = append(fitted, truncate(line, 300))
+	}
+	return fitted
+}
+
+func (c *Client) systemPrompt(history, candidates []string) string {
 	var b strings.Builder
-	if len(lines) > 0 {
-		b.WriteString("Последние сообщения чата:\n")
-		for i := len(lines) - 1; i >= 0; i-- {
-			b.WriteString(lines[i])
+	b.WriteString(c.cfg.SystemPrompt)
+	if len(history) > 0 {
+		b.WriteString("\n\nО чём сейчас говорят в чате (только для понимания темы, не повторяй эти фразы):\n")
+		for _, line := range history {
+			b.WriteString("- ")
+			b.WriteString(line)
 			b.WriteString("\n")
 		}
 	}
-	b.WriteString(tail.String())
+	if len(candidates) > 0 {
+		b.WriteString("\nОбрывки фраз в духе этого чата (можно взять словечко):\n")
+		for _, cand := range candidates {
+			b.WriteString("- ")
+			b.WriteString(truncate(cand, 200))
+			b.WriteString("\n")
+		}
+	}
 	return b.String()
+}
+
+// normalize lowercases s and keeps only letters, digits and single spaces.
+func normalize(s string) string {
+	return strings.Join(strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	}), " ")
 }
 
 var listNumber = regexp.MustCompile(`^\d+[.)]\s+`)
