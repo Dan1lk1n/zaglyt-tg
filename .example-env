@@ -45,7 +45,7 @@ DB_PASSWORD="!"
 DB_NAME=""
 
 # ---- Local LLM (optional) ----
-# Enable the llm container (llama.cpp + Vikhr-Gemma-2B Q4) in compose.
+# Enable the llm container (llama.cpp + Qwen2.5-7B-abliterated Q4) in compose.
 # Remove this line (or `docker compose stop llm`) to free RAM: the bot then
 # answers with the plain Markov pipeline.
 COMPOSE_PROFILES="llm"
@@ -60,10 +60,10 @@ LLM_MAX_TOKENS="80"
 LLM_MAX_PROMPT_CHARS="2500"
 LLM_CONTEXT_MESSAGES="15"
 # llm container limits.
-LLM_MEM_LIMIT="2560m"
+LLM_MEM_LIMIT="5g"
 # Model to serve (any GGUF on HuggingFace that fits LLM_MEM_LIMIT).
-LLM_HF_REPO="Vikhrmodels/Vikhr-Gemma-2B-instruct-GGUF"
-LLM_HF_FILE="Vikhr-Gemma-2B-instruct-Q4_K_S.gguf"
+LLM_HF_REPO="QuantFactory/Qwen2.5-7B-Instruct-abliterated-v2-GGUF"
+LLM_HF_FILE="Qwen2.5-7B-Instruct-abliterated-v2.Q4_K_M.gguf"
 LLM_CTX_SIZE="4096"
 LLM_THREADS="2"
 # JSON with chat member profiles (see personas.example.json). Holds real names
