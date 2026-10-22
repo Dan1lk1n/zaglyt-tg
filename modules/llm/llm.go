@@ -178,7 +178,7 @@ func (c *Client) Compose(ctx context.Context, r Request) (string, error) {
 			return "", err
 		}
 		if lastErr = validateReply(reply, r); lastErr == nil {
-			return reply, nil
+			return fixAddress(reply, r), nil
 		}
 	}
 	return "", lastErr
@@ -367,7 +367,7 @@ func (c *Client) systemPrompt(r Request) string {
 	return b.String()
 }
 
-var botInsult = regexp.MustCompile(`(?i)(нахуй|нахер|тупо[йе]|дебил|долбо[её]б|заткнись|лох|бесполезн|сука|пидор|мудак|урод|говно)`)
+var botInsult = regexp.MustCompile(`(?i)(нахуй|нахер|тупо[йе]|дебил|долбо[её]б|заткнись|лох|бесполезн|сука|пидор|мудак|урод|говно|хуил|хуесос|чмо|еблан|гандон|конченн?ый|уёб|уеб)`)
 
 // insultsBot reports a message that swears at the bot rather than asks "кто".
 func insultsBot(q string) bool {
@@ -411,6 +411,29 @@ func insultsNear(text string, p Person) bool {
 	return false
 }
 
+var leadingAddress = regexp.MustCompile(`^([А-ЯЁа-яё]+),\s*`)
+
+// fixAddress replaces a leading "Имя," that names another chat member (the
+// model sometimes copies a name from the chat) with the author's address.
+// Other leading words ("Слушай,", "Короче,") are left alone.
+func fixAddress(reply string, r Request) string {
+	m := leadingAddress.FindStringSubmatch(reply)
+	if m == nil || r.Author.Name == "" || namesPerson(m[1], r.Author) {
+		return reply
+	}
+	others := append([]Person{}, r.Protected...)
+	others = append(others, r.Mentioned...)
+	for _, name := range r.Members {
+		others = append(others, Person{Name: name})
+	}
+	for _, p := range others {
+		if namesPerson(m[1], p) {
+			return address(r.Author) + ", " + reply[len(m[0]):]
+		}
+	}
+	return reply
+}
+
 // relatedLines returns history lines sharing a significant word stem with q.
 func relatedLines(q string, history []string) []string {
 	stems := map[string]bool{}
@@ -421,6 +444,11 @@ func relatedLines(q string, history []string) []string {
 	}
 	var out []string
 	for _, line := range history {
+		// The bot's own earlier replies are left out: the model copies them,
+		// including whom they were addressed to.
+		if strings.HasPrefix(line, "Ты: ") {
+			continue
+		}
 		text := line
 		if i := strings.Index(line, ": "); i >= 0 {
 			text = line[i+2:]
