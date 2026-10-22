@@ -53,6 +53,25 @@ type Config struct {
 	// MystemCacheSize bounds the in-memory morphological-analysis cache by
 	// number of entries. <= 0 disables caching.
 	MystemCacheSize int
+
+	// LLM settings. An empty LLMURL disables the LLM and the bot replies with
+	// pure Markov output, as before.
+	LLMURL             string
+	LLMModel           string
+	LLMSystemPrompt    string
+	LLMTimeoutSeconds  int
+	LLMMaxTokens       int
+	LLMMaxPromptChars  int
+	LLMContextMessages int
+	// LLMPersonasFile is a JSON file describing chat members (see
+	// personas.example.json). Kept out of git: it holds real names and IDs.
+	LLMPersonasFile string
+	// LLMConcurrency caps simultaneous LLM requests; extra messages get a
+	// Markov reply instead of waiting in line.
+	LLMConcurrency int
+
+	// BotWorkers is how many updates are processed in parallel.
+	BotWorkers int
 }
 
 func LoadConfig() (*Config, error) {
@@ -88,6 +107,18 @@ func LoadConfig() (*Config, error) {
 		LogFormat:   os.Getenv("LOG_FORMAT"),
 
 		MystemCacheSize: parseInt(os.Getenv("MYSTEM_CACHE_SIZE"), 20000),
+
+		LLMURL:             strings.TrimSpace(os.Getenv("LLM_URL")),
+		LLMModel:           os.Getenv("LLM_MODEL"),
+		LLMSystemPrompt:    os.Getenv("LLM_SYSTEM_PROMPT"),
+		LLMTimeoutSeconds:  parseInt(os.Getenv("LLM_TIMEOUT_SECONDS"), 30),
+		LLMMaxTokens:       parseInt(os.Getenv("LLM_MAX_TOKENS"), 80),
+		LLMMaxPromptChars:  parseInt(os.Getenv("LLM_MAX_PROMPT_CHARS"), 2500),
+		LLMContextMessages: parseInt(os.Getenv("LLM_CONTEXT_MESSAGES"), 15),
+		LLMPersonasFile:    os.Getenv("LLM_PERSONAS_FILE"),
+		LLMConcurrency:     parseInt(os.Getenv("LLM_CONCURRENCY"), 1),
+
+		BotWorkers: parseInt(os.Getenv("BOT_WORKERS"), 8),
 	}
 
 	if strings.TrimSpace(cfg.BotToken) == "" {
@@ -126,6 +157,13 @@ func LoadConfig() (*Config, error) {
 		if cfg.Host == "" || cfg.Port == "" || cfg.User == "" || cfg.DBName == "" {
 			return nil, errors.New("neither DATABASE_URL nor the full set of DB_* values is provided")
 		}
+	}
+
+	if cfg.BotWorkers < 1 {
+		cfg.BotWorkers = 1
+	}
+	if cfg.LLMConcurrency < 1 {
+		cfg.LLMConcurrency = 1
 	}
 
 	if cfg.Driver == "" {

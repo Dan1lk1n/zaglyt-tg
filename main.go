@@ -73,6 +73,9 @@ func main() {
 			handler.MessageHandler(ctx, b, update)
 		}),
 		bot.WithMiddlewares(middlewares.RecoveryMiddleware),
+		// The library defaults to one worker, so a slow reply (LLM, typing
+		// delay) would stall every other update behind it.
+		bot.WithWorkers(cfg.BotWorkers),
 		bot.WithAllowedUpdates(bot.AllowedUpdates(allowedUpdates)),
 	}
 

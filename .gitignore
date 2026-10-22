@@ -14,3 +14,9 @@ mystem-*.tar.gz
 .DS_Store
 .idea/
 .vscode/
+
+# chat member profiles: real names and Telegram IDs (see personas.example.json)
+personas.json
+
+# local LLM evaluation harness: scenarios use real Telegram IDs from personas.json
+/eval/
