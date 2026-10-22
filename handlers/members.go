@@ -125,8 +125,9 @@ func displayName(user *goTelegramModels.User) string {
 }
 
 // pickTarget answers "кто …" questions with a random chat member.
-// Protected people (the bot's creator) are never picked.
-func pickTarget(query string, members []llm.Person) llm.Person {
+// Protected people (the bot's creator) are never picked. Recent authors live
+// in memory only, so right after a restart the known personas are used.
+func pickTarget(query string, members []llm.Person, personas *llm.Personas) llm.Person {
 	q := strings.ToLower(strings.TrimSpace(query))
 	if q != "кто" && !strings.HasPrefix(q, "кто ") && !strings.HasPrefix(q, "кто,") {
 		return llm.Person{}
@@ -135,6 +136,13 @@ func pickTarget(query string, members []llm.Person) llm.Person {
 	for _, p := range members {
 		if !p.Protected {
 			pool = append(pool, p)
+		}
+	}
+	if len(pool) == 0 && personas != nil {
+		for _, p := range personas.People {
+			if !p.Protected {
+				pool = append(pool, p.Person)
+			}
 		}
 	}
 	if len(pool) == 0 {
