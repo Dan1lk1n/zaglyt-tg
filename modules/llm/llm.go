@@ -217,6 +217,14 @@ func validateReply(reply string, r Request) error {
 			return errors.New("llm copied a chat line")
 		}
 	}
+	if foreignScript(reply) {
+		return errors.New("llm reply switched to another language")
+	}
+	for _, p := range append([]Person{r.Author, r.Target}, r.Mentioned...) {
+		if copiesNotes(reply, p.Notes) {
+			return fmt.Errorf("llm reply retells the profile of %s", p.Name)
+		}
+	}
 	if len(strings.Fields(normalize(reply))) < minReplyWords {
 		return errors.New("llm reply is too short")
 	}
@@ -226,10 +234,11 @@ func validateReply(reply string, r Request) error {
 // complete sends one chat request and returns the cleaned reply text.
 func (c *Client) complete(ctx context.Context, messages []chatMessage) (string, error) {
 	body, err := json.Marshal(chatRequest{
-		Model:           c.cfg.Model,
-		Messages:        messages,
-		MaxTokens:       c.cfg.MaxTokens,
-		Temperature:     1.0,
+		Model:     c.cfg.Model,
+		Messages:  messages,
+		MaxTokens: c.cfg.MaxTokens,
+		// Lower than 1.0: 7B models otherwise slip into Chinese or English.
+		Temperature:     0.85,
 		TopP:            0.95,
 		PresencePenalty: 0.5,
 		// Explicit per-request seed so identical prompts don't produce identical replies.
@@ -406,6 +415,40 @@ func insultsNear(text string, p Person) bool {
 			if botInsult.MatchString(w[j]) {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// foreignScript reports a reply that drifted out of Russian: any CJK
+// character, or at least 3 Latin words making up over a quarter of the reply
+// (single brand names like "iPhone" are fine).
+func foreignScript(s string) bool {
+	for _, r := range s {
+		if unicode.Is(unicode.Han, r) || unicode.Is(unicode.Hiragana, r) || unicode.Is(unicode.Katakana, r) || unicode.Is(unicode.Hangul, r) {
+			return true
+		}
+	}
+	words := strings.FieldsFunc(s, func(r rune) bool { return !unicode.IsLetter(r) })
+	latin := 0
+	for _, w := range words {
+		if unicode.Is(unicode.Latin, []rune(w)[0]) {
+			latin++
+		}
+	}
+	return latin >= 3 && latin*4 > len(words)
+}
+
+// copiesNotes reports 4+ consecutive words taken from a profile note.
+func copiesNotes(reply, notes string) bool {
+	nw := strings.Fields(normalize(notes))
+	if len(nw) < 4 {
+		return false
+	}
+	rw := " " + normalize(reply) + " "
+	for i := 0; i+4 <= len(nw); i++ {
+		if strings.Contains(rw, " "+strings.Join(nw[i:i+4], " ")+" ") {
+			return true
 		}
 	}
 	return false

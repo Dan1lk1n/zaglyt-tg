@@ -51,7 +51,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # Vikhr-Gemma-2B-instruct (Q4_K_S, ~1.6 GB, ~1.7 GB RAM) served by llama.cpp.
+  # Qwen2.5-7B-Instruct-abliterated-v2 (Q4_K_M, ~4.7 GB, ~3.5 GB RAM) served by llama.cpp.
   # Memory is bounded on three levels:
   #   - fixed context window (-c): the KV cache never grows past it; the bot
   #     trims old chat messages so every prompt fits (LLM_MAX_PROMPT_CHARS);
@@ -67,9 +67,9 @@ services:
     command:
       # Any GGUF from HuggingFace that fits LLM_MEM_LIMIT can be swapped in.
       - --hf-repo
-      - ${LLM_HF_REPO:-Vikhrmodels/Vikhr-Gemma-2B-instruct-GGUF}
+      - ${LLM_HF_REPO:-QuantFactory/Qwen2.5-7B-Instruct-abliterated-v2-GGUF}
       - --hf-file
-      - ${LLM_HF_FILE:-Vikhr-Gemma-2B-instruct-Q4_K_S.gguf}
+      - ${LLM_HF_FILE:-Qwen2.5-7B-Instruct-abliterated-v2.Q4_K_M.gguf}
       - --host
       - 0.0.0.0
       - --port
@@ -93,8 +93,8 @@ services:
     volumes:
       # Downloaded model weights, so restarts don't re-download the model.
       - llm-models:/root/.cache
-    mem_limit: ${LLM_MEM_LIMIT:-2560m}
-    memswap_limit: ${LLM_MEM_LIMIT:-2560m}
+    mem_limit: ${LLM_MEM_LIMIT:-5g}
+    memswap_limit: ${LLM_MEM_LIMIT:-5g}
     healthcheck:
       test: ["CMD", "curl", "-fs", "http://localhost:8080/health"]
       interval: 10s
