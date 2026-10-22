@@ -44,6 +44,9 @@ func (h *Handler) MessageHandler(ctx context.Context, b *bot.Bot, update *goTele
 		return
 	}
 
+	h.members.Seen(update.Message.Chat.ID, update.Message.From)
+	h.members.Said(update.Message.Chat.ID, h.members.Person(update.Message.From).Name, update.Message.Text)
+
 	if !helpers.ShouldRespond(ctx, b, update, h.bot.Username, h.cfg.BotName, channel.ReplyProbability) {
 		return
 	}
@@ -68,7 +71,7 @@ func (h *Handler) MessageHandler(ctx context.Context, b *bot.Bot, update *goTele
 		slog.Error("send chat action", "chat_id", update.Message.Chat.ID, "err", err)
 	}
 
-	response := h.composeResponse(ctx, update.Message.Text, history, genCfg)
+	response := h.composeResponse(ctx, update.Message, history, genCfg)
 	if response == "" {
 		slog.Debug("no response generated", "chat_id", update.Message.Chat.ID)
 		return
@@ -100,6 +103,9 @@ func (h *Handler) MessageHandler(ctx context.Context, b *bot.Bot, update *goTele
 		slog.Error("send message", "chat_id", update.Message.Chat.ID, "err", err)
 		return
 	}
+
+	// The bot's own lines are part of the dialog too.
+	h.members.Said(update.Message.Chat.ID, "Ты", response)
 }
 
 // stripBotMention removes the leading bot name and the @username from the
@@ -123,7 +129,8 @@ const llmCandidates = 3
 
 // composeResponse builds a reply: Markov candidates first, then the LLM picks,
 // polishes or replaces them. Any LLM failure falls back to the Markov reply.
-func (h *Handler) composeResponse(ctx context.Context, query string, history []string, genCfg z3abp.Config) string {
+func (h *Handler) composeResponse(ctx context.Context, msg *goTelegramModels.Message, history []string, genCfg z3abp.Config) string {
+	query := msg.Text
 	attempts := 1
 	if h.llm != nil {
 		attempts = llmCandidates
@@ -147,15 +154,32 @@ func (h *Handler) composeResponse(ctx context.Context, query string, history []s
 		return candidates[0]
 	}
 
-	// The triggering message was just appended; it's passed separately as query.
-	recent := history
-	if n := len(recent); n > 0 && recent[n-1] == query {
+	// Prefer the in-memory dialog with author names; right after a restart it
+	// is empty, so fall back to the stored text-only history. Either way the
+	// triggering message is last and is passed separately as the query.
+	recent := h.members.Dialog(msg.Chat.ID)
+	if len(recent) <= 1 {
+		recent = history
+	}
+	if n := len(recent); n > 0 {
 		recent = recent[:n-1]
 	}
 
-	reply, err := h.llm.Compose(ctx, recent, h.stripBotMention(query), candidates)
+	stripped := h.stripBotMention(query)
+	members := h.members.List(msg.Chat.ID)
+	reply, err := h.llm.Compose(ctx, llm.Request{
+		History:    recent,
+		Query:      stripped,
+		Candidates: candidates,
+		Members:    names(members),
+		Author:     h.members.Person(msg.From),
+		Mentioned:  h.personas.Mentioned(stripped),
+		Target:     pickTarget(stripped, members),
+		General:    h.personas.General,
+		Protected:  h.personas.Protected(),
+	})
 	if err != nil {
-		if !errors.Is(err, llm.ErrUnavailable) {
+		if !errors.Is(err, llm.ErrUnavailable) && !errors.Is(err, llm.ErrBusy) {
 			slog.Warn("llm compose failed, using markov reply", "err", err)
 		}
 		if len(candidates) == 0 {
