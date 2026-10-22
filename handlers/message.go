@@ -174,7 +174,7 @@ func (h *Handler) composeResponse(ctx context.Context, msg *goTelegramModels.Mes
 		Members:    names(members),
 		Author:     h.members.Person(msg.From),
 		Mentioned:  h.personas.Mentioned(stripped),
-		Target:     pickTarget(stripped, members),
+		Target:     pickTarget(stripped, members, h.personas),
 		General:    h.personas.General,
 		Protected:  h.personas.Protected(),
 	})
